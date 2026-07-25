@@ -71,10 +71,17 @@ export const DEFAULT_CHARGERS = [
     ccs2: 'confirmed', position: 'exact', source: 'operator announcement',
   },
   {
+    // Provenance, honestly: a search result showed a PlugShare listing titled
+    // "chargeNET - Koswatta" — that establishes a station exists, nothing more.
+    // The PlugShare page itself could not be read (it is a JS app), so the
+    // connector was never verified, and chargeNET's own site says its fast
+    // chargers are "CHAdeMO or CCS" — not necessarily both at every site.
+    // The position is a geocode of the locality "Koswatta, Battaramulla", not
+    // the forecourt. The 70/kWh is chargeNET's general DC rate, not this site's.
     id: 'chargenet-koswatta', name: 'chargeNET · Koswatta', address: 'Koswatta, Battaramulla',
     lat: 6.90412, lng: 79.90042, network: 'chargeNET', app: 'chargeNET Plus',
-    connectors: ['CCS2'], flatRate: 70,
-    ccs2: 'confirmed', position: 'exact', source: 'PlugShare',
+    connectors: null, flatRate: 70,
+    ccs2: 'unknown', position: 'approx', source: 'listing title + geocoded locality',
   },
 
   /* ── Keells / John Keells CG Auto network: CCS2 + CHAdeMO stated per site on
@@ -138,7 +145,9 @@ export const DEFAULT_CHARGERS = [
     id: 'volt-keells-karapitiya', name: 'VOLT · Keells Karapitiya', address: 'Hirimbura Cross Rd, Galle',
     lat: 6.06388, lng: 80.22207, network: 'VOLT Charge', app: 'VOLT Charge',
     connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
-    ccs2: 'confirmed', position: 'exact', source: 'PlugShare',
+    // PlugShare's listing states CHAdeMO + CCS2 and 24/7 for this site, so the
+    // connector is sound; the pin is a geocode of Karapitiya, so it is approx.
+    ccs2: 'confirmed', position: 'approx', source: 'PlugShare listing',
   },
   {
     id: 'volt-keells-matara', name: 'VOLT · Keells Matara', address: 'Welewatta, Matara',
