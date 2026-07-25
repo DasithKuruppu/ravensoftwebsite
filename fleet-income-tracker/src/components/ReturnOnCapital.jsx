@@ -1,14 +1,19 @@
-import { money, amount } from '../format.js';
+import { money, amount, monthLabel } from '../format.js';
 
 /**
  * What the money sunk into the car is earning, against what it could earn
  * sitting in a fixed deposit.
  *
+ * Led by NEXT month, not this one. The first month is short and prorated, so
+ * annualising it exaggerates whatever it happens to show — here it reads −17.3%
+ * against a full month's 0.1%. The part-month is kept alongside for contrast
+ * rather than hidden, but it is not the headline.
+ *
  * This answers a different question from profit. Profit asks "am I making
  * money"; this asks "is this a better use of the capital than the obvious
- * alternative". Both are worth seeing, so the forgone interest is a line of its
- * own rather than being buried in running costs — it is not cash leaving the
- * account, and folding it in would make the profit figure wrong for cash flow.
+ * alternative". So the forgone interest is a line of its own rather than buried
+ * in running costs — it is not cash leaving the account, and folding it in
+ * would make the profit figure wrong for cash flow.
  */
 export default function ReturnOnCapital({ summary }) {
   const r = summary.roi;
@@ -23,31 +28,35 @@ export default function ReturnOnCapital({ summary }) {
     );
   }
 
-  const beatsFd = r.annualisedReturnPct >= r.ratePct;
-  const tone = beatsFd ? 'text-accent' : 'text-danger';
+  const h = r.headline;
+  const basisLabel =
+    r.headlineIsNextMonth && r.nextMonthLabel
+      ? `${monthLabel(`${r.nextMonthLabel}-01`)} at this rate`
+      : 'this month, annualised';
+  const tone = h.beatsAlternative ? 'text-accent' : 'text-danger';
 
   return (
     <div className="card">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
         <h2 className="label">Return on capital</h2>
         <span className="text-xs text-slate-500">owner only</span>
       </div>
+      <p className="text-xs text-slate-500 mb-3">based on {basisLabel}</p>
 
-      {/* The comparison, side by side. */}
       <div className="grid grid-cols-2 gap-3">
         <Side
           label={r.leasedPct > 0 ? 'The car, on your equity' : 'The car'}
-          pct={`${r.annualisedReturnPct}%`}
-          sub={`${money(summary.projectedOwnerProfit)}/month`}
+          pct={h.returnPct === null ? '—' : `${h.returnPct}%`}
+          sub={`${money(h.monthlyProfit)}/month`}
           tone={tone}
-          active={beatsFd}
+          active={h.beatsAlternative}
         />
         <Side
           label={`Fixed deposit @ ${r.ratePct}%`}
           pct={`${r.ratePct}%`}
           sub={`${money(r.monthlyAlternative)}/month`}
           tone="text-slate-300"
-          active={!beatsFd}
+          active={!h.beatsAlternative}
         />
       </div>
 
@@ -57,7 +66,7 @@ export default function ReturnOnCapital({ summary }) {
           <>
             <Row
               label={`Leased (${r.leasedPct}%)`}
-              hint="the financier's money, not yours — paid for by the instalment"
+              hint="the financier's money — paid for by the instalment"
               value={amount(r.leased)}
               tone="text-slate-500"
             />
@@ -66,13 +75,13 @@ export default function ReturnOnCapital({ summary }) {
         )}
         <Row
           label="Profit, annualised"
-          hint="this month's projection × 12"
-          value={amount(r.annualisedProfit)}
-          tone={r.annualisedProfit < 0 ? 'text-danger' : 'text-slate-200'}
+          hint={basisLabel}
+          value={amount(h.annualisedProfit)}
+          tone={h.annualisedProfit < 0 ? 'text-danger' : 'text-slate-200'}
         />
         <Row
           label="Interest given up"
-          hint="not cash — what the money could have earned"
+          hint="not cash — what your own money could have earned"
           value={`− ${amount(r.monthlyAlternative)}`}
           tone="text-warn"
         />
@@ -81,24 +90,32 @@ export default function ReturnOnCapital({ summary }) {
             Versus leaving it in the bank
             <span className="block text-xs text-slate-600">per month</span>
           </dt>
-          <dd className={`num text-lg ${r.economicProfit < 0 ? 'text-danger' : 'text-accent'}`}>
-            {money(r.economicProfit)}
+          <dd className={`num text-lg ${h.economicProfit < 0 ? 'text-danger' : 'text-accent'}`}>
+            {money(h.economicProfit)}
           </dd>
         </div>
       </dl>
 
-      {r.leasedPct > 0 && (
-        <p className="text-xs text-slate-500 mt-3">
-          Interest is charged only on the <span className="num">{amount(r.equity)}</span> you put in.
-          The leased {r.leasedPct}% costs you the instalment, which is already in running costs —
-          counting it here too would bill it twice.
+      {/* The part-month, for contrast — shown but not led on. */}
+      {r.headlineIsNextMonth && r.thisMonth && (
+        <p className="text-xs text-slate-600 mt-3">
+          This month, being partial and prorated, annualises to{' '}
+          <span className="num">{r.thisMonth.returnPct}%</span> — which is why it is not the basis
+          here.
         </p>
       )}
 
-      <p className="text-xs text-slate-500 mt-3">
-        {beatsFd
-          ? `The car is beating a ${r.ratePct}% deposit on the current month's run rate.`
-          : `On this month's run rate the capital would earn more in a ${r.ratePct}% deposit. One partial month annualises badly — judge it over a few full months.`}
+      {r.leasedPct > 0 && (
+        <p className="text-xs text-slate-500 mt-2">
+          Interest is charged only on the <span className="num">{amount(r.equity)}</span> you put
+          in. The leased {r.leasedPct}% costs you the instalment, already counted in running costs.
+        </p>
+      )}
+
+      <p className="text-xs text-slate-500 mt-2">
+        {h.beatsAlternative
+          ? `A full month at this rate beats a ${r.ratePct}% deposit.`
+          : `On a full month at this rate the capital would still earn more in a ${r.ratePct}% deposit.`}
       </p>
     </div>
   );

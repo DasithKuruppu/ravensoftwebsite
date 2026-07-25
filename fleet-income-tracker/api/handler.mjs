@@ -407,7 +407,6 @@ async function buildSummary(month, auth) {
     // What is actually left after paying the driver and running the car.
     payload.ownerProfit = round2(share - costs.total);
     payload.projectedOwnerProfit = round2(projShare - costs.total);
-    payload.roi = buildRoi({ settings, projectedProfit: round2(projShare - costs.total) });
     // Owner-only half of next month: what it costs and what it leaves.
     if (payload.nextMonth) {
       const nm = payload.nextMonth;
@@ -419,6 +418,15 @@ async function buildSummary(month, auth) {
       nm.ownerShare = ownerShare(nm.revenue, settings, 1);
       nm.ownerProfit = round2(nm.ownerShare - nmCosts.total);
     }
+
+    payload.roi = buildRoi({
+      settings,
+      thisMonthProfit: round2(projShare - costs.total),
+      // The fair basis: a full month on full bands. Annualising a prorated
+      // part-month exaggerates whatever it happens to show.
+      nextMonthProfit: payload.nextMonth?.ownerProfit ?? null,
+      nextMonthLabel: payload.nextMonth?.month ?? null,
+    });
   }
 
   return payload;
@@ -881,7 +889,7 @@ function buildNextMonth({ month, settings, dailyRate, kmDriven, workedDays }) {
  * Annualising one month is noisy, so the figure is labelled as coming from this
  * month's projection rather than presented as a settled return.
  */
-function buildRoi({ settings, projectedProfit }) {
+function buildRoi({ settings, thisMonthProfit, nextMonthProfit, nextMonthLabel }) {
   const capital = Number(settings.capitalInvested) || 0;
   const ratePct = Number(settings.alternativeRatePct) || 0;
   if (capital <= 0) return null;
@@ -896,7 +904,22 @@ function buildRoi({ settings, projectedProfit }) {
   const leased = round2(capital - equity);
 
   const monthlyAlternative = round2((equity * (ratePct / 100)) / 12);
-  const annualisedProfit = round2(projectedProfit * 12);
+
+  const basis = (monthlyProfit) => {
+    if (monthlyProfit === null || monthlyProfit === undefined) return null;
+    const annualised = round2(monthlyProfit * 12);
+    return {
+      monthlyProfit: round2(monthlyProfit),
+      annualisedProfit: annualised,
+      // Return on the money actually put in, not on the sticker price.
+      returnPct: equity > 0 ? Math.round((annualised / equity) * 1000) / 10 : null,
+      economicProfit: round2(monthlyProfit - monthlyAlternative),
+      beatsAlternative: equity > 0 && annualised / equity >= ratePct / 100,
+    };
+  };
+
+  const nextMonth = basis(nextMonthProfit);
+  const thisMonth = basis(thisMonthProfit);
 
   return {
     capital: round2(capital),
@@ -905,10 +928,12 @@ function buildRoi({ settings, projectedProfit }) {
     equity,
     ratePct,
     monthlyAlternative,
-    annualisedProfit,
-    // Return on the money actually put in, not on the sticker price.
-    annualisedReturnPct: equity > 0 ? Math.round((annualisedProfit / equity) * 1000) / 10 : null,
-    economicProfit: round2(projectedProfit - monthlyAlternative),
+    nextMonthLabel,
+    // Lead on the full month; the part-month is kept for contrast only.
+    headline: nextMonth || thisMonth,
+    headlineIsNextMonth: Boolean(nextMonth),
+    nextMonth,
+    thisMonth,
   };
 }
 
