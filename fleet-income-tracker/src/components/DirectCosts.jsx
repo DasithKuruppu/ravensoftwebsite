@@ -7,7 +7,9 @@ import { money, amount } from '../format.js';
  * about 54 to 150 per kWh, so this is a number he can actually move. The rest
  * of the ledger — lease, depreciation, insurance — stays with the owner.
  *
- * Shown to both roles: the owner needs to know what the driver is being told.
+ * Driver-only. The owner already sees charging inside the full cost ledger, so
+ * showing this to him as well was duplication that made it read as an owner
+ * card rather than the driver's.
  */
 export default function DirectCosts({ summary }) {
   const d = summary.directCosts;
@@ -16,7 +18,7 @@ export default function DirectCosts({ summary }) {
   return (
     <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
-        <h2 className="label">Cost of running the car</h2>
+        <h2 className="label">Charging / electricity</h2>
         <span className="text-xs text-slate-500">
           <span className="num">{amount(d.kmDriven)}</span> km this month
         </span>
@@ -48,8 +50,9 @@ export default function DirectCosts({ summary }) {
       {d.shareOfRevenue !== null && (
         <p className="text-xs text-slate-500 mt-3">
           That is <span className="num text-slate-300">{d.shareOfRevenue}%</span> of the revenue
-          brought in this month. Charging off-peak or at a cheaper station lowers it — the map on
-          this page shows the rate at each one.
+          brought in this month — the electricity cost of the driving behind it. Charging off-peak
+          or at a cheaper station lowers it; the map at the bottom of this page shows the rate at
+          every station.
         </p>
       )}
     </div>

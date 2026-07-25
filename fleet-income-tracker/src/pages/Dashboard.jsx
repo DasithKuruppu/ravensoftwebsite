@@ -93,6 +93,11 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
               is the one card written for the driver rather than the owner. */}
           <PushToTier summary={summary} />
 
+          {/* Driver-only, and placed high: it is the one cost he can act on,
+              and it was previously six cards down where he would never see it.
+              The owner sees charging inside the full ledger instead. */}
+          {!isOwner && <DirectCosts summary={summary} />}
+
           <ProjectionChart summary={summary} />
 
           {/* Owner-only; the API omits these fields for a driver token. */}
@@ -108,8 +113,6 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
           )}
 
           <div className="grid md:grid-cols-2 gap-5">
-            {/* Shown to both roles — the driver can act on charging costs. */}
-            <DirectCosts summary={summary} />
             <CashSplit summary={summary} />
 
             <div className="card">
