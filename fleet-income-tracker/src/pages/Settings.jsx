@@ -41,6 +41,7 @@ export default function Settings() {
       const next = await api.saveSettings({
         ...form,
         startDate: form.startDate || null,
+        driverName: (form.driverName || '').trim() || 'Driver',
         base: Number(form.base),
         bandStart: Number(form.bandStart),
         bandEnd: Number(form.bandEnd),
@@ -96,8 +97,23 @@ export default function Settings() {
         </div>
 
         <div className="grid gap-1 max-w-xs">
+          <label className="label" htmlFor="driverName">
+            Driver name
+          </label>
+          <input
+            id="driverName"
+            value={form.driverName || ''}
+            onChange={(e) => setForm({ ...form, driverName: e.target.value })}
+            placeholder="Driver"
+          />
+          <p className="text-xs text-slate-500">
+            Used throughout the app, and accepted as a sign-in name as well as “driver”.
+          </p>
+        </div>
+
+        <div className="grid gap-1 max-w-xs">
           <label className="label" htmlFor="startDate">
-            Driver start date
+            Start date
           </label>
           <input
             id="startDate"

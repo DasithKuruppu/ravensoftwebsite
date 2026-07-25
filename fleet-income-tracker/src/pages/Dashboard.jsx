@@ -6,7 +6,7 @@ import TierLadder from '../components/TierLadder.jsx';
 import VehicleMap from '../components/VehicleMap.jsx';
 import CashSplit from '../components/CashSplit.jsx';
 
-export default function Dashboard({ month, setMonth, isOwner }) {
+export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -16,7 +16,7 @@ export default function Dashboard({ month, setMonth, isOwner }) {
     setLoading(true);
     api
       .summary(month)
-      .then((s) => !cancelled && (setSummary(s), setError('')))
+      .then((s) => !cancelled && (setSummary(s), setError(''), onDriverName?.(s.driverName)))
       .catch((e) => !cancelled && setError(e.message))
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -37,7 +37,7 @@ export default function Dashboard({ month, setMonth, isOwner }) {
             <div className="rounded-lg border border-warn/30 bg-warn/5 px-4 py-3 text-sm">
               <span className="text-warn font-medium">Partial month.</span>{' '}
               <span className="text-slate-300">
-                The driver started {summary.startDate}, so this month has{' '}
+                {summary.driverName} started {summary.startDate}, so this month has{' '}
                 <span className="num">{count(summary.operatingDays)}</span> of{' '}
                 <span className="num">{count(summary.daysInMonth)}</span> operating days. The plan
                 is scaled to <span className="num">{Math.round(summary.prorationFactor * 100)}%</span>{' '}
@@ -55,7 +55,11 @@ export default function Dashboard({ month, setMonth, isOwner }) {
               label="Days logged"
               value={`${count(summary.daysLogged)} / ${count(summary.operatingDays)}`}
             />
-            <Stat label="Take-home (LKR)" value={amount(summary.driverPay)} accent />
+            <Stat
+              label={`${summary.driverName} take-home (LKR)`}
+              value={amount(summary.driverPay)}
+              accent
+            />
           </div>
 
           <TierLadder
@@ -69,7 +73,7 @@ export default function Dashboard({ month, setMonth, isOwner }) {
             <CashSplit summary={summary} />
 
             <div className="card">
-              <h2 className="label mb-3">Driver pay at current revenue</h2>
+              <h2 className="label mb-3">{summary.driverName} pay at current revenue</h2>
               <dl className="space-y-2">
                 {summary.tiers.map((t) => (
                   <div key={t.key} className="flex items-baseline justify-between gap-4">

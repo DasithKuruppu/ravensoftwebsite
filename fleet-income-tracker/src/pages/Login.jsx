@@ -40,7 +40,7 @@ export default function Login({ onLogin }) {
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="owner or driver"
+              placeholder="your username"
             />
           </div>
           <div className="grid gap-1">

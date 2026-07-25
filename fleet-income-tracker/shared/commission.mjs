@@ -22,6 +22,12 @@ export const DEFAULT_SETTINGS = {
   topRate: 0.5,
   /** Date the driver started, yyyy-mm-dd. null means "has always been running". */
   startDate: null,
+  /**
+   * What to call the driver in the UI. Deliberately generic here — this repo is
+   * public, so the real name is set once in the app and lives in the database,
+   * not in source control.
+   */
+  driverName: 'Driver',
 };
 
 /**

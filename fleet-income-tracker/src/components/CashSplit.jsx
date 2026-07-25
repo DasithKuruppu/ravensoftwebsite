@@ -12,7 +12,8 @@ import { money, amount } from '../format.js';
  * owner needs to know what to collect.
  */
 export default function CashSplit({ summary }) {
-  const { revenue, cashCollected, bankCredited, cashShare, cashKnown } = summary;
+  const { revenue, cashCollected, bankCredited, cashShare, cashKnown, driverName } = summary;
+  const who = driverName || 'the driver';
 
   if (!cashKnown) {
     return (
@@ -45,14 +46,14 @@ export default function CashSplit({ summary }) {
 
       <dl className="mt-4 space-y-2">
         <Row
-          swatch="bg-warn/70"
-          label="Cash collected by driver"
-          hint="held by the driver — to hand over"
+          icon={<CashIcon />}
+          label={`Cash collected by ${who}`}
+          hint={`held by ${who} — to hand over`}
           value={money(cashCollected)}
           tone="text-warn"
         />
         <Row
-          swatch="bg-accent/60"
+          icon={<BankIcon />}
           label="Credited to company bank"
           hint="settled by Uber"
           value={money(bankCredited)}
@@ -67,11 +68,15 @@ export default function CashSplit({ summary }) {
   );
 }
 
-function Row({ swatch, label, hint, value, tone }) {
+// The icon is tinted to match its segment of the bar above, so a separate
+// colour swatch would just be noise.
+function Row({ icon, label, hint, value, tone }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <dt className="text-sm text-slate-400 flex items-baseline gap-2">
-        <span className={`inline-block w-2.5 h-2.5 rounded-sm shrink-0 ${swatch}`} />
+      <dt className="text-sm text-slate-400 flex items-start gap-2.5">
+        {/* Icon carries the meaning at a glance; the swatch ties the row back
+            to its segment of the bar above. */}
+        <span className={`shrink-0 mt-0.5 ${tone}`}>{icon}</span>
         <span>
           {label}
           <span className="block text-xs text-slate-600">{hint}</span>
@@ -79,5 +84,39 @@ function Row({ swatch, label, hint, value, tone }) {
       </dt>
       <dd className={`num ${tone}`}>{value}</dd>
     </div>
+  );
+}
+
+const iconProps = {
+  width: 16,
+  height: 16,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.8,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  'aria-hidden': true,
+};
+
+/** Banknote — physical cash in the driver's hand. */
+function CashIcon() {
+  return (
+    <svg {...iconProps}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 12h.01M18 12h.01" />
+    </svg>
+  );
+}
+
+/** Bank — money that lands in the company account. */
+function BankIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M3 10h18M12 3 3 8h18z" />
+      <path d="M6 10v7M10 10v7M14 10v7M18 10v7" />
+      <path d="M3 20h18" />
+    </svg>
   );
 }

@@ -40,6 +40,8 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
 
 const DRIVER_ID = process.env.DRIVER_ID || DEFAULT_DRIVER;
 
+const READ_ONLY = 'Entries are read-only for the driver';
+
 export async function handler(event) {
   const method = event.requestContext?.http?.method || event.httpMethod || 'GET';
   const rawPath = event.rawPath || event.path || '/';
@@ -69,7 +71,8 @@ async function route(method, path, event, cors) {
 
   /* ── public ── */
   if (method === 'POST' && path === '/login') {
-    const result = await login(body.username, body.password);
+    // The driver signs in with his own name as well as the generic "driver".
+    const result = await login(await resolveUsername(body.username), body.password);
     if (!result) return json(401, { error: 'invalid_credentials' }, cors);
     return json(200, result, cors);
   }
@@ -93,6 +96,7 @@ async function route(method, path, event, cors) {
   }
 
   if (method === 'POST' && path === '/entries/import') {
+    if (!isOwner(auth)) return json(403, { error: 'forbidden', message: READ_ONLY }, cors);
     const rows = Array.isArray(body.rows) ? body.rows : [];
     return json(200, await importRows(rows), cors);
   }
@@ -100,6 +104,11 @@ async function route(method, path, event, cors) {
   const entryMatch = path.match(/^\/entries\/(\d{4}-\d{2}-\d{2})$/);
   if (entryMatch) {
     const date = entryMatch[1];
+    // The revenue record is the owner's book. The driver can read it — he needs
+    // to see his own earnings and what cash he owes — but cannot alter it.
+    if (method !== 'GET' && !isOwner(auth)) {
+      return json(403, { error: 'forbidden', message: READ_ONLY }, cors);
+    }
     if (method === 'PUT') {
       const entry = {
         date,
@@ -137,6 +146,10 @@ async function route(method, path, event, cors) {
             : /^\d{4}-\d{2}-\d{2}$/.test(body.startDate || '')
               ? body.startDate
               : null,
+        driverName:
+          typeof body.driverName === 'string' && body.driverName.trim()
+            ? body.driverName.trim().slice(0, 40)
+            : current.driverName || 'Driver',
         csvMapping: body.csvMapping === undefined ? current.csvMapping ?? null : body.csvMapping,
       };
       if (next.bandEnd <= next.bandStart) {
@@ -188,6 +201,23 @@ async function route(method, path, event, cors) {
   return json(404, { error: 'not_found', path }, cors);
 }
 
+/**
+ * Map whatever was typed to the account it means. The driver's own name is an
+ * alias for the `driver` account, so he does not have to sign in as a job title.
+ */
+async function resolveUsername(input) {
+  const typed = String(input || '').trim().toLowerCase();
+  if (typed === 'owner' || typed === 'driver') return typed;
+  try {
+    const settings = await store.getSettings(DRIVER_ID);
+    const name = (settings.driverName || '').trim().toLowerCase();
+    if (name && typed === name) return 'driver';
+  } catch {
+    // Settings unreadable — fall through and let the login fail normally.
+  }
+  return typed;
+}
+
 /* ─────────────────────────── domain logic ─────────────────────────── */
 
 async function buildSummary(month, auth) {
@@ -235,6 +265,7 @@ async function buildSummary(month, auth) {
     // 1 for a normal month; below 1 only in the month the driver started.
     prorationFactor: Math.round(factor * 10000) / 10000,
     startDate: settings.startDate ?? null,
+    driverName: settings.driverName || 'Driver',
     driverPay: current.total,
     tiers: current.tiers,
     // Both roles see this: the driver needs to know how much cash he is holding.

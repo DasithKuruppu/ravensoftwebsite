@@ -11,6 +11,7 @@ import { currentMonth } from './format.js';
 export default function App() {
   const [role, setRole] = useState(() => (getToken() ? getRole() : null));
   const [month, setMonth] = useState(currentMonth);
+  const [driverName, setDriverName] = useState('');
 
   // The API client fires this whenever a call comes back 401 (expired token).
   useEffect(() => {
@@ -35,11 +36,25 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <Header role={role} isOwner={isOwner} onLogout={handleLogout} />
+      <Header
+        role={role === 'driver' && driverName ? driverName : role}
+        isOwner={isOwner}
+        onLogout={handleLogout}
+      />
       {/* Bottom padding clears the mobile tab bar, which is position: fixed. */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-28 sm:pb-6">
         <Routes>
-          <Route path="/" element={<Dashboard month={month} setMonth={setMonth} isOwner={isOwner} />} />
+          <Route
+            path="/"
+            element={
+              <Dashboard
+                month={month}
+                setMonth={setMonth}
+                isOwner={isOwner}
+                onDriverName={setDriverName}
+              />
+            }
+          />
           <Route path="/log" element={<DailyLog month={month} setMonth={setMonth} isOwner={isOwner} />} />
           <Route
             path="/validate"

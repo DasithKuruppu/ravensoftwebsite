@@ -104,7 +104,9 @@ export default function DailyLog({ month, setMonth, isOwner }) {
         </p>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-5">
+      <div className={`grid gap-5 ${isOwner ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
+        {/* Writing is owner-only; the API refuses the driver regardless. */}
+        {isOwner && (
         <div className="lg:col-span-1 space-y-5">
           <form onSubmit={save} className="card space-y-3">
             <h2 className="label">{editing ? `Edit ${editing}` : 'Add a day'}</h2>
@@ -141,8 +143,9 @@ export default function DailyLog({ month, setMonth, isOwner }) {
             onImported={() => load({ silent: true })}
           />
         </div>
+        )}
 
-        <div className="lg:col-span-2 card overflow-x-auto">
+        <div className={`card overflow-x-auto ${isOwner ? 'lg:col-span-2' : ''}`}>
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="label">Entries</h2>
             <span className="text-xs text-slate-500">
@@ -161,7 +164,9 @@ export default function DailyLog({ month, setMonth, isOwner }) {
             <Spinner label="Loading entries…" />
           ) : entries.length === 0 ? (
             <p className="text-sm text-slate-500 py-6 text-center">
-              No entries this month yet. Add one, or import a CSV.
+              {isOwner
+                ? 'No entries this month yet. Add one, or import a CSV.'
+                : 'No entries recorded for this month.'}
             </p>
           ) : (
             <Refreshing active={busy}>
@@ -175,7 +180,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
                   <th className="th text-right">Uber km</th>
                   <th className="th text-right">GPS km</th>
                   <th className="th">Src</th>
-                  <th className="th"></th>
+                  {isOwner && <th className="th"></th>}
                 </tr>
               </thead>
               <tbody>
@@ -194,17 +199,19 @@ export default function DailyLog({ month, setMonth, isOwner }) {
                         {e.source}
                       </span>
                     </td>
-                    <td className="td text-right whitespace-nowrap">
-                      <button className="btn text-xs px-2 py-1" onClick={() => edit(e)}>
-                        Edit
-                      </button>
-                      <button
-                        className="btn btn-danger text-xs px-2 py-1 ml-1"
-                        onClick={() => remove(e.date)}
-                      >
-                        Del
-                      </button>
-                    </td>
+                    {isOwner && (
+                      <td className="td text-right whitespace-nowrap">
+                        <button className="btn text-xs px-2 py-1" onClick={() => edit(e)}>
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn-danger text-xs px-2 py-1 ml-1"
+                          onClick={() => remove(e.date)}
+                        >
+                          Del
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
