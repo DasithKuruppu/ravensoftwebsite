@@ -14,6 +14,9 @@
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-tracker.ravensoft.click}"
+# The account that serves ravensoft.click and holds its Route 53 zone. Kept in
+# step with the pin in infra/bin/fleet-tracker.ts.
+EXPECTED_ACCOUNT="${EXPECTED_ACCOUNT:-191331702653}"
 PARENT_DOMAIN="${DOMAIN#*.}"
 REGION="us-east-1"   # CloudFront certificates must live in us-east-1
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,12 +28,29 @@ bold "▸ fleet-income-tracker deploy"
 info "domain: $DOMAIN   region: $REGION"
 
 # ── 0. Prerequisites ────────────────────────────────────────────────────────
+# Honour AWS_PROFILE if the caller set one (e.g. AWS_PROFILE=scrawl npm run deploy).
 if ! aws sts get-caller-identity >/dev/null 2>&1; then
-  echo "✗ AWS credentials are not working. Run 'aws configure' first." >&2
+  echo "✗ AWS credentials are not working." >&2
+  echo "  Run 'aws configure', or select a working profile:" >&2
+  echo "      AWS_PROFILE=<profile> npm run deploy" >&2
+  echo "  Note: a key beginning ASIA is a temporary STS credential and expires." >&2
   exit 1
 fi
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
-info "account: $ACCOUNT"
+info "account: $ACCOUNT${AWS_PROFILE:+  (profile: $AWS_PROFILE)}"
+
+# The stack pins its account, so a mismatch would fail deep inside CDK with a
+# confusing error. Catch it here instead.
+if [[ "$ACCOUNT" != "$EXPECTED_ACCOUNT" ]]; then
+  echo >&2
+  echo "✗ Wrong AWS account." >&2
+  echo "  These credentials are for $ACCOUNT, but this stack is pinned to $EXPECTED_ACCOUNT" >&2
+  echo "  (the account serving ravensoft.click)." >&2
+  echo >&2
+  echo "  Either select the right profile:   AWS_PROFILE=<profile> npm run deploy" >&2
+  echo "  or, to deploy elsewhere on purpose: EXPECTED_ACCOUNT=$ACCOUNT npm run deploy" >&2
+  exit 1
+fi
 
 # ── 1. Is the parent zone hosted in this account? ───────────────────────────
 bold "▸ Looking for a Route 53 hosted zone for $PARENT_DOMAIN"
@@ -92,7 +112,7 @@ fi
 
 # ── 2. Deploy the stack ─────────────────────────────────────────────────────
 bold "▸ Deploying FleetTrackerStack"
-( cd "$ROOT/infra" && npx cdk deploy --require-approval never --outputs-file cdk-outputs.json "${CTX[@]}" )
+( cd "$ROOT/infra" && npx cdk deploy --require-approval never --outputs-file cdk-outputs.json -c "account=$ACCOUNT" "${CTX[@]}" )
 
 OUTPUTS="$ROOT/infra/cdk-outputs.json"
 get() { node -e "console.log(require('$OUTPUTS').FleetTrackerStack.$1 || '')"; }

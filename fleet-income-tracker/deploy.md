@@ -16,13 +16,30 @@ and touches nothing that serves it — only the `tracker.` subdomain.
 - A shell in the `fleet-income-tracker/` directory
 
 ```bash
-aws configure
-# AWS Access Key ID:     …
-# AWS Secret Access Key: …
-# Default region name:   us-east-1
-# Default output format: json
+aws sts get-caller-identity     # must print account 191331702653, not an error
+```
 
-aws sts get-caller-identity     # must print your account, not an error
+This stack is **pinned to account `191331702653`** — the account that already
+serves ravensoft.click and holds its Route 53 hosted zone
+(`Z068676727JIHK1E2CC9S`). The pin lives in `infra/bin/fleet-tracker.ts`, and
+`deploy.sh` refuses to run against any other account rather than silently
+deploying a second copy of everything somewhere else.
+
+Pick the profile that belongs to that account:
+
+```bash
+AWS_PROFILE=scrawl npm run deploy
+```
+
+If `get-caller-identity` fails with `InvalidClientTokenId`, check whether the
+key starts with **`ASIA`** — that is a temporary STS session credential and
+expires within hours. A permanent IAM key starts with `AKIA`. Fix it with
+`aws configure`, or use a profile that has one.
+
+To deploy somewhere else on purpose:
+
+```bash
+EXPECTED_ACCOUNT=<other-account> npm run deploy
 ```
 
 Install dependencies for both the app and the infrastructure:
@@ -37,10 +54,11 @@ npm --prefix infra install
 ## 2. Bootstrap CDK (once per account/region)
 
 ```bash
-npx --prefix infra cdk bootstrap aws://<ACCOUNT_ID>/us-east-1
+AWS_PROFILE=scrawl npx --prefix infra cdk bootstrap aws://191331702653/us-east-1
 ```
 
-`<ACCOUNT_ID>` is the `Account` field printed by `get-caller-identity`.
+The account already has a `CDKToolkit` stack from the ravensoft site, so this is
+likely a no-op. Running it again is harmless and will not disturb that stack.
 
 ---
 
@@ -63,6 +81,11 @@ That one command:
 **If the hosted zone is in this account**, CDK creates the certificate
 validation records and the `tracker.ravensoft.click` alias record itself.
 Nothing manual.
+
+This is the path that applies here: `ravensoft.click` is already hosted in
+account 191331702653 as zone `Z068676727JIHK1E2CC9S`, so the deploy runs
+straight through with no DNS step and no pause. The apex and `www` records are
+untouched — only a new `tracker` record is added.
 
 **If it is not**, the script requests the certificate, then **pauses** and
 prints the exact CNAME to add, for example:
