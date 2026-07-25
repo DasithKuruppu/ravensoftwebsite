@@ -150,10 +150,12 @@ async function route(method, path, event, cors) {
     return json(200, await buildValidation(month), cors);
   }
 
+  // Visible to both roles. The driver is the person being tracked, so showing
+  // him the same position the owner sees makes the tracking transparent rather
+  // than one-way — and he already knows where he is. Owner-share figures stay
+  // owner-only because those are commercial, not data about him.
+  // When a second driver exists, scope this to the caller's own vehicle.
   if (method === 'GET' && path === '/location') {
-    if (!isOwner(auth)) {
-      return json(403, { error: 'forbidden', message: 'Vehicle location is owner-only' }, cors);
-    }
     try {
       return json(200, await vehicleLocation(), cors);
     } catch (err) {

@@ -64,8 +64,9 @@ export default function Dashboard({ month, setMonth, isOwner }) {
             bandEnd={summary.plan.bandEnd}
           />
 
-          {/* Owner-only: the API refuses /location for driver tokens anyway. */}
-          {isOwner && <VehicleMap />}
+          {/* Shown to both roles — the driver can see the same position the
+              owner does, rather than being tracked one-way. */}
+          <VehicleMap />
 
           <div className="grid md:grid-cols-2 gap-5">
             <div className="card">

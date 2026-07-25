@@ -113,6 +113,11 @@ Role enforcement is server-side. A `driver` token is refused by the API on
 settings, GPS comparison and owner-share figures — hiding the tabs is cosmetic,
 the API is the control.
 
+The vehicle's live location is deliberately **not** restricted: the driver is
+the person being tracked, so he sees the same position the owner does rather
+than being tracked one-way, and he already knows where he is. Owner-share stays
+owner-only because it is commercial information, not data about him.
+
 ## CSV import
 
 Uber Fleet Portal exports have unknown column names, so the import is two-step:
