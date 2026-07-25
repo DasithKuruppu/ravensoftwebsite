@@ -72,6 +72,7 @@ export const api = {
   entries: (month) => request('GET', `/entries?month=${month}`),
   saveEntry: (date, entry) => request('PUT', `/entries/${date}`, entry),
   deleteEntry: (date) => request('DELETE', `/entries/${date}`),
+  setOffDay: (date, off) => request('PUT', `/entries/${date}/off`, { off }),
   importRows: (rows) => request('POST', '/entries/import', { rows }),
   settings: () => request('GET', '/settings'),
   saveSettings: (settings) => request('PUT', '/settings', settings),

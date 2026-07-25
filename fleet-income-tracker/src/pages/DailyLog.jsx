@@ -4,6 +4,7 @@ import { amount, count, dayLabel, todayLocal } from '../format.js';
 import MonthNav from '../components/MonthNav.jsx';
 import CsvImport from '../components/CsvImport.jsx';
 import Spinner, { Refreshing } from '../components/Spinner.jsx';
+import DaysOff from '../components/DaysOff.jsx';
 
 const EMPTY = { date: '', revenue: '', trips: '', uberKm: '', gpsKm: '', cashCollected: '' };
 
@@ -104,7 +105,11 @@ export default function DailyLog({ month, setMonth, isOwner }) {
         </p>
       )}
 
-      <div className={`grid gap-5 ${isOwner ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
+      {/* Marking days off is the one write the driver may make, so it sits
+          outside the owner-only column. */}
+      <DaysOff entries={entries} month={month} onChange={() => load({ silent: true })} />
+
+      <div className={`grid gap-5 mt-5 ${isOwner ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
         {/* Writing is owner-only; the API refuses the driver regardless. */}
         {isOwner && (
         <div className="lg:col-span-1 space-y-5">
@@ -185,8 +190,20 @@ export default function DailyLog({ month, setMonth, isOwner }) {
               </thead>
               <tbody>
                 {entries.map((e) => (
-                  <tr key={e.date} className={editing === e.date ? 'bg-ink-800/50' : ''}>
-                    <td className="td num whitespace-nowrap">{dayLabel(e.date)}</td>
+                  <tr
+                    key={e.date}
+                    className={`${editing === e.date ? 'bg-ink-800/50' : ''} ${
+                      e.offDay ? 'opacity-60' : ''
+                    }`}
+                  >
+                    <td className="td num whitespace-nowrap">
+                      {dayLabel(e.date)}
+                      {e.offDay && (
+                        <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-500 border border-ink-700 rounded px-1">
+                          off
+                        </span>
+                      )}
+                    </td>
                     <td className="td num text-right text-slate-100">{amount(e.revenue)}</td>
                     <td className="td num text-right text-warn/90">
                       {e.cashCollected == null ? '—' : amount(e.cashCollected)}

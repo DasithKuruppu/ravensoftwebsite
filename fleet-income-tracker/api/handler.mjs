@@ -101,6 +101,28 @@ async function route(method, path, event, cors) {
     return json(200, await importRows(rows), cors);
   }
 
+  // Marking a day off is the single write the driver may make. He is recording
+  // his own availability, not touching the revenue record — and he is the one
+  // who knows he was not driving. Revenue on the day is left untouched either
+  // way, so this cannot be used to hide earnings.
+  const offMatch = path.match(/^\/entries\/(\d{4}-\d{2}-\d{2})\/off$/);
+  if (offMatch && method === 'PUT') {
+    const date = offMatch[1];
+    const off = body.off === true;
+    const existing = await store.getEntry(DRIVER_ID, date);
+    const saved = await store.putEntry(DRIVER_ID, {
+      date,
+      revenue: existing?.revenue ?? 0,
+      trips: existing?.trips ?? null,
+      uberKm: existing?.uberKm ?? null,
+      gpsKm: existing?.gpsKm ?? null,
+      cashCollected: existing?.cashCollected ?? null,
+      source: existing?.source ?? 'manual',
+      offDay: off,
+    });
+    return json(200, saved, cors);
+  }
+
   const entryMatch = path.match(/^\/entries\/(\d{4}-\d{2}-\d{2})$/);
   if (entryMatch) {
     const date = entryMatch[1];
@@ -117,6 +139,7 @@ async function route(method, path, event, cors) {
         uberKm: toNumber(body.uberKm),
         gpsKm: toNumber(body.gpsKm),
         cashCollected: toNumber(body.cashCollected),
+        offDay: body.offDay === true,
         source: ['manual', 'csv', 'api'].includes(body.source) ? body.source : 'manual',
       };
       return json(200, await store.putEntry(DRIVER_ID, entry), cors);
@@ -248,7 +271,21 @@ async function buildSummary(month, auth) {
     todayInColombo(),
   );
 
-  const projectedRevenue = projectRevenue(revenue, elapsedDays, operatingTotal);
+  // Days off correct the RUN-RATE but never the target.
+  //
+  // Excluding them from the average is fair: a day he was not driving should
+  // not read as a day he earned nothing. Excluding them from the band would
+  // not be — the tiers are a commercial term tied to the start date, and
+  // letting time off shrink them would mean the less he worked, the easier
+  // his bonus became. So `factor` and `operatingTotal` are left alone and only
+  // the denominators of the average and the projection change.
+  const offElapsed = entries.filter((e) => e.offDay && e.date <= todayInColombo()).length;
+  const offAhead = entries.filter((e) => e.offDay && e.date > todayInColombo()).length;
+  const workedDays = Math.max(0, elapsedDays - offElapsed);
+  const remainingWorkDays = Math.max(0, operatingTotal - elapsedDays - offAhead);
+
+  const dailyRate = workedDays > 0 ? revenue / workedDays : 0;
+  const projectedRevenue = round2(revenue + dailyRate * remainingWorkDays);
 
   const current = calculatePay(revenue, settings, factor);
   const projected = calculatePay(projectedRevenue, settings, factor);
@@ -279,9 +316,10 @@ async function buildSummary(month, auth) {
       revenue,
       trips,
       projectedRevenue,
-      dailyAverage: elapsedDays > 0 ? revenue / elapsedDays : 0,
+      dailyAverage: dailyRate,
       elapsedDays,
       operatingTotal,
+      remainingWorkDays,
       projectedPay: projected.total,
     }),
     trips,
@@ -289,13 +327,18 @@ async function buildSummary(month, auth) {
     daysInMonth,
     elapsedDays,
     operatingDays: operatingTotal,
+    workedDays,
+    offDaysElapsed: offElapsed,
+    offDaysAhead: offAhead,
+    remainingWorkDays,
     // 1 for a normal month; below 1 only in the month the driver started.
     prorationFactor: Math.round(factor * 10000) / 10000,
     startDate: settings.startDate ?? null,
     driverName: settings.driverName || 'Driver',
     // Average per operating day elapsed — the same run-rate the projection
     // extrapolates, so the two figures always agree with each other.
-    dailyAverage: elapsedDays > 0 ? round2(revenue / elapsedDays) : 0,
+    // Per day actually worked, so time off does not read as a bad day.
+    dailyAverage: round2(dailyRate),
     // Yesterday, not a rolling average and not today: today is still being
     // driven, so it always reads low and would misrepresent recent form.
     // Yesterday is the last complete day and the fairest recent comparison.
@@ -524,10 +567,10 @@ function yesterdayRevenue(entries) {
  */
 function buildPush({
   settings, factor, revenue, trips, projectedRevenue, dailyAverage,
-  elapsedDays, operatingTotal, projectedPay,
+  elapsedDays, operatingTotal, remainingWorkDays, projectedPay,
 }) {
   const plan = prorate(settings, factor);
-  const daysLeft = Math.max(0, operatingTotal - elapsedDays);
+  const daysLeft = remainingWorkDays;
 
   // Which threshold is next, judged on the projection rather than today's
   // total — the question is where the month is heading.
@@ -556,7 +599,7 @@ function buildPush({
     bandEnd: plan.bandEnd,
     dailyAverage: round2(dailyAverage),
     revenuePerTrip: trips > 0 ? round2(revenue / trips) : null,
-    tripsPerDay: elapsedDays > 0 && trips > 0 ? Math.round((trips / elapsedDays) * 10) / 10 : null,
+    tripsPerDay: trips > 0 && elapsedDays > 0 ? Math.round((trips / elapsedDays) * 10) / 10 : null,
     daysLeft,
   };
 

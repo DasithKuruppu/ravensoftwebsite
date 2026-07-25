@@ -269,6 +269,9 @@ function toEntry(item) {
         ? null
         : num(rest.cashCollected),
     source: rest.source || 'manual',
+    // A day the driver was not working. Kept separate from "no entry", which
+    // only means nobody has recorded anything yet.
+    offDay: rest.offDay === true,
     updatedAt: rest.updatedAt,
   };
 }
