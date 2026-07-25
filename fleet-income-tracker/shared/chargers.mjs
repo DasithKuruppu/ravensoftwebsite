@@ -192,6 +192,71 @@ export const DEFAULT_CHARGERS = [
     lat: 6.8387, lng: 79.97886, network: 'Independent',
     connectors: null, ccs2: 'unknown', position: 'exact', source: 'OpenStreetMap',
   },
+
+  /* Further Keells branches from the same JKCG locator. Positions come from the
+     Keells outlet in OpenStreetMap where it is mapped, otherwise from geocoding
+     the branch locality — the latter are marked approx. All LKR 150/kWh, 24/7,
+     CCS2 + CHAdeMO per the operator's own listing. */
+  ...[
+    ['keells-kalegana',      'Keells · Kalegana',      'Wackwella Rd, Kalegana, Galle',   6.06715, 80.22562, 'approx'],
+    ['keells-battaramulla',  'Keells · Battaramulla',  'Pannipitiya Rd, Battaramulla',    6.90218, 79.91958, 'approx'],
+    ['keells-nawala',        'Keells · Nawala',        'Nawala',                          6.89675, 79.89117, 'exact'],
+    ['keells-kirulapone',    'Keells · Kirulapone',    'Kirulapone, Colombo 05',          6.87952, 79.87586, 'exact'],
+    ['keells-nedimala',      'Keells · Nedimala',      'Nedimala, Dehiwala',              6.84959, 79.87751, 'exact'],
+    ['keells-thimbirigasyaya','Keells · Thimbirigasyaya','Thimbirigasyaya, Colombo 05',   6.88688, 79.86472, 'exact'],
+    ['keells-wijerama',      'Keells · Wijerama',      'Wijerama, Nugegoda',              6.85765, 79.90816, 'exact'],
+    ['keells-wellawatte',    'Keells · Wellawatte',    'Wellawatte, Colombo 06',          6.87499, 79.86097, 'approx'],
+    ['keells-kalubowila',    'Keells · Kalubowila',    'Hospital Rd, Kalubowila',         6.86370, 79.86844, 'approx'],
+    ['keells-rathmalana',    'Keells · Rathmalana',    'Galle Rd, Ratmalana',             6.83801, 79.86746, 'approx'],
+    ['keells-panadura',      'Keells · Panadura',      'Panadura',                        6.72592, 79.90609, 'exact'],
+    ['keells-nalluruwa',     'Keells · Nalluruwa',     'Galle Rd, Nalluruwa, Panadura',   6.70095, 79.91275, 'exact'],
+    ['keells-kaduwela',      'Keells · Kaduwela',      'Hewagama, Kaduwela',              6.93320, 79.97547, 'approx'],
+    ['keells-kiribathgoda',  'Keells · Kiribathgoda',  'Kandy Rd, Kiribathgoda',          6.98843, 79.93754, 'approx'],
+    ['keells-wattala',       'Keells · Wattala',       'Negombo Rd, Wattala',             6.97530, 79.88779, 'approx'],
+    ['keells-eldeniya',      'Keells · Eldeniya',      'Kandy Rd, Kadawatha',             7.00568, 79.95741, 'approx'],
+    ['keells-kurana',        'Keells · Kurana',        'Colombo Rd, Kurana, Negombo',     7.21382, 79.84757, 'approx'],
+    ['keells-kalutara',      'Keells · Kalutara',      'Galle Rd, Kalutara',              6.71104, 79.90752, 'approx'],
+    ['keells-horana',        'Keells · Horana',        'Ratnapura Rd, Horana',            6.73106, 80.10362, 'approx'],
+    ['keells-tangalle',      'Keells · Tangalle',      'Matara Rd, Tangalle',             6.03755, 80.79878, 'approx'],
+    ['keells-kandy',         'Keells · Kandy',         'Peradeniya Rd, Kandy',            7.26708, 80.59640, 'approx'],
+    ['keells-kurunegala',    'Keells · Kurunegala',    'Bauddhaloka Mw, Kurunegala',      7.48192, 80.36077, 'approx'],
+    ['keells-anuradhapura',  'Keells · Anuradhapura',  'M. Senanayake Mw, Anuradhapura',  8.32886, 80.40774, 'approx'],
+    ['keells-ratnapura',     'Keells · Ratnapura',     'Bandaranayake Mw, Ratnapura',     6.70654, 80.38240, 'approx'],
+    ['keells-kegalle',       'Keells · Kegalle',       'Kandy Rd, Kegalle',               7.24980, 80.46236, 'approx'],
+    ['keells-matale',        'Keells · Matale',        'Aluvihare, Matale',               7.48917, 80.62150, 'approx'],
+    ['keells-chilaw',        'Keells · Chilaw',        'Puttalam Rd, Chilaw',             7.57691, 79.79514, 'approx'],
+  ].map(([id, name, address, lat, lng, position]) => ({
+    id, name, address, lat, lng, position,
+    network: 'Keells / JKCG', app: 'VOLT Charge',
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
+    ccs2: 'confirmed', source: 'johnkeellscgauto.com',
+  })),
+
+  /* Fuel stations that have added DC charging. Lanka IOC forecourts operated by
+     Samrin Holdings under the [IEV] brand are the notable ones — Makumbura at
+     LKR 60/kWh is the cheapest public DC in this list, undercutting chargeNET.
+     Their listings say "DC Fast L3" without naming the connector, so CCS2 is
+     marked unconfirmed: check before relying on one. */
+  ...[
+    ['iev-makumbura',   'IOC/IEV · Kottawa–Makumbura', 'Hokandara Rd, Makumbura',  6.83923, 79.97269, 60, 40, '24/7'],
+    ['iev-ambalantota', 'IOC/IEV · Ambalantota',       'Thissa Rd, Ambalantota',   6.12246, 81.02386, 70, 30, '24/7'],
+    ['iev-matara',      'IOC/IEV · Matara',            'Isadeen Town, Matara',     5.94782, 80.54829, 70, 30, '24/7'],
+    ['iev-eldeniya',    'IOC/IEV · Eldeniya',          'A1, Eldeniya, Kadawatha',  7.00568, 79.95741, 70, 20, '07:00–21:00'],
+  ].map(([id, name, address, lat, lng, flatRate, powerKw, hours]) => ({
+    id, name, address, lat, lng, flatRate, powerKw, hours,
+    network: 'Lanka IOC / Samrin (IEV)', app: 'on-site payment',
+    connectors: null, ccs2: 'unknown', position: 'approx', source: 'evclub.lk',
+  })),
+  {
+    id: 'ioc-filling-station', name: 'IOC Filling Station', address: 'Badulla area',
+    lat: 6.90359, lng: 80.91231, network: 'Lanka IOC',
+    connectors: null, ccs2: 'unknown', position: 'exact', source: 'OpenStreetMap',
+  },
+  {
+    id: 'rts-fuel-hidellana', name: 'RTS Fuel Station · Hidellana', address: 'Colombo–Ratnapura Rd, Hidellana',
+    lat: 6.71595, lng: 80.38473, network: 'RTS Fuel',
+    connectors: null, ccs2: 'unknown', position: 'exact', source: 'OpenStreetMap',
+  },
 ];
 
 /**
