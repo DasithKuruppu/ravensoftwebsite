@@ -146,7 +146,7 @@ export default function VehicleMap() {
         <span className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
           <Status loc={loc} />
           <span>
-            fix <Ago iso={loc.fixedAt} ageSeconds={loc.fixAgeSeconds} />
+            updated <Ago iso={loc.fixedAt} ageSeconds={loc.fixAgeSeconds} />
           </span>
         </span>
       </div>
@@ -371,8 +371,10 @@ function escapeHtml(s) {
  *
  * The tracker's own speed field reads 0 permanently on this device, so the API
  * derives speed from how far the vehicle moved between fixes. When it has only
- * one fix to go on it says "position only" rather than claiming "stationary" —
- * which is what the old code did, and why the car always looked parked.
+ * one reading to go on it says "movement unknown" rather than claiming
+ * "stationary" — which is what the old code did, and why the car always looked
+ * parked. "Fix" is the GPS term for a position reading, but it reads as
+ * "repaired" to anyone who does not know that, so the UI says "updated".
  */
 function Status({ loc }) {
   const { status, speedKmh, movedM } = loc;
@@ -389,8 +391,11 @@ function Status({ loc }) {
   }
   if (status === 'parked') return <Chip tone="slate">parked</Chip>;
   return (
-    <Chip tone="slate" title="Only one fix so far — movement is known once a second fix arrives">
-      position only
+    <Chip
+      tone="slate"
+      title="Only one reading so far — whether the car is moving is known once a second one arrives"
+    >
+      movement unknown
     </Chip>
   );
 }
@@ -399,7 +404,7 @@ function statusText(loc) {
   if (loc.status === 'offline') return 'offline';
   if (loc.status === 'moving') return loc.speedKmh != null ? `moving · ${loc.speedKmh} km/h` : 'moving';
   if (loc.status === 'parked') return 'parked';
-  return 'position only';
+  return 'movement unknown';
 }
 
 function Chip({ tone, children, title }) {
