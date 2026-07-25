@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { calculatePay } from '../../shared/commission.mjs';
 import { money, amount } from '../format.js';
+import ChargerEditor from '../components/ChargerEditor.jsx';
 
 const CHECK_REVENUE = 406789.2;
 const CHECK_EXPECTED = 121394.6;
@@ -71,7 +72,7 @@ export default function Settings() {
   const matches = live.total === CHECK_EXPECTED;
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="max-w-4xl space-y-5">
       {error && <Banner>{error}</Banner>}
 
       <form onSubmit={save} className="card space-y-4">
@@ -153,6 +154,8 @@ export default function Settings() {
           ))}
         </dl>
       </div>
+
+      <ChargerEditor />
 
       {saved?.csvMapping && (
         <div className="card">

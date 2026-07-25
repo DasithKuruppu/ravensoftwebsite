@@ -156,6 +156,24 @@ async function route(method, path, event, cors) {
   // than one-way — and he already knows where he is. Owner-share figures stay
   // owner-only because those are commercial, not data about him.
   // When a second driver exists, scope this to the caller's own vehicle.
+  // Charging stations. Readable by both roles — the driver is the one who
+  // actually has to find a charger — but only the owner can edit the list.
+  if (path === '/chargers') {
+    if (method === 'GET') {
+      return json(200, { chargers: await store.getChargers() }, cors);
+    }
+    if (method === 'PUT') {
+      if (!isOwner(auth)) {
+        return json(403, { error: 'forbidden', message: 'Editing chargers is owner-only' }, cors);
+      }
+      const list = Array.isArray(body.chargers) ? body.chargers.map(cleanCharger).filter(Boolean) : null;
+      if (!list) {
+        return json(400, { error: 'invalid_chargers', message: 'chargers must be an array' }, cors);
+      }
+      return json(200, { chargers: await store.putChargers(list) }, cors);
+    }
+  }
+
   if (method === 'GET' && path === '/location') {
     try {
       return json(200, await vehicleLocation(), cors);
@@ -387,6 +405,45 @@ async function vehicleLocation() {
   const value = { available: true, ...loc };
   locationCache = { at: Date.now(), value };
   return { ...value, cached: false };
+}
+
+/**
+ * Normalise one station before storing it. A charger with no usable position is
+ * dropped rather than saved — it would sort as "nearest" from anywhere.
+ */
+function cleanCharger(c) {
+  const lat = toNumber(c?.lat);
+  const lng = toNumber(c?.lng);
+  if (lat === undefined || lng === undefined) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+  const tou =
+    c.tou && ['day', 'peak', 'offPeak'].some((k) => toNumber(c.tou[k]) !== undefined)
+      ? {
+          day: toNumber(c.tou.day) ?? null,
+          peak: toNumber(c.tou.peak) ?? null,
+          offPeak: toNumber(c.tou.offPeak) ?? null,
+        }
+      : null;
+
+  return {
+    id: String(c.id || `charger-${lat.toFixed(4)}-${lng.toFixed(4)}`),
+    name: String(c.name || 'Unnamed charger').slice(0, 80),
+    address: c.address ? String(c.address).slice(0, 160) : '',
+    lat,
+    lng,
+    network: c.network ? String(c.network).slice(0, 60) : '',
+    app: c.app ? String(c.app).slice(0, 60) : '',
+    connectors: Array.isArray(c.connectors) ? c.connectors.map(String).slice(0, 6) : null,
+    powerKw: toNumber(c.powerKw) ?? null,
+    hours: c.hours ? String(c.hours).slice(0, 40) : '',
+    flatRate: toNumber(c.flatRate) ?? null,
+    tou,
+    // Default to the cautious value: an unmarked station is NOT a CCS2 promise.
+    ccs2: c.ccs2 === 'confirmed' ? 'confirmed' : 'unknown',
+    position: c.position === 'approx' ? 'approx' : 'exact',
+    source: c.source ? String(c.source).slice(0, 60) : '',
+  };
 }
 
 /* ────────────────────────────── helpers ────────────────────────────── */

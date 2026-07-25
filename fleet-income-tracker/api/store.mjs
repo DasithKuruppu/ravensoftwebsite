@@ -14,6 +14,7 @@
  * real table in production.
  */
 import { DEFAULT_SETTINGS } from '../shared/commission.mjs';
+import { DEFAULT_CHARGERS } from '../shared/chargers.mjs';
 
 const TABLE = process.env.TABLE_NAME || 'fleet-tracker';
 const MODE = process.env.STORE || (process.env.DDB_ENDPOINT ? 'ddb' : 'memory');
@@ -22,6 +23,10 @@ export const DEFAULT_DRIVER = 'default';
 const pk = (driverId) => `DRIVER#${driverId}`;
 const entrySk = (date) => `ENTRY#${date}`;
 const SETTINGS_SK = 'SETTINGS';
+// Charging stations are fleet-wide, not per-driver, so they sit in their own
+// partition rather than under DRIVER#<id>.
+const CONFIG_PK = 'CONFIG';
+const CHARGERS_SK = 'CHARGERS';
 
 /* ────────────────────────────── DynamoDB ────────────────────────────── */
 
@@ -109,6 +114,28 @@ const ddbImpl = {
     await client.send(new PutCommand({ TableName: TABLE, Item: item }));
     return stripKeys(item);
   },
+
+  async getChargers() {
+    const { GetCommand } = await import('@aws-sdk/lib-dynamodb');
+    const client = await ddb();
+    const res = await client.send(
+      new GetCommand({ TableName: TABLE, Key: { pk: CONFIG_PK, sk: CHARGERS_SK } }),
+    );
+    // Nothing saved yet: fall back to the seed list shipped with the code.
+    return res.Item?.list?.length ? res.Item.list : DEFAULT_CHARGERS;
+  },
+
+  async putChargers(list) {
+    const { PutCommand } = await import('@aws-sdk/lib-dynamodb');
+    const client = await ddb();
+    await client.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: { pk: CONFIG_PK, sk: CHARGERS_SK, list, updatedAt: new Date().toISOString() },
+      }),
+    );
+    return list;
+  },
 };
 
 /* ─────────────────────── Local JSON-file fallback ─────────────────────── */
@@ -175,6 +202,18 @@ const memImpl = {
     db[pk(driverId)][SETTINGS_SK] = item;
     writeAll(db);
     return stripKeys(item);
+  },
+  async getChargers() {
+    const db = readAll();
+    const item = (db[CONFIG_PK] || {})[CHARGERS_SK];
+    return item?.list?.length ? item.list : DEFAULT_CHARGERS;
+  },
+  async putChargers(list) {
+    const db = readAll();
+    db[CONFIG_PK] = db[CONFIG_PK] || {};
+    db[CONFIG_PK][CHARGERS_SK] = { list, updatedAt: new Date().toISOString() };
+    writeAll(db);
+    return list;
   },
 };
 

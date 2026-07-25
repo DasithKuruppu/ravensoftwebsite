@@ -50,3 +50,34 @@
     @apply px-3 py-2 border-t border-ink-800;
   }
 }
+
+/* Leaflet: OpenStreetMap only ships light tiles, so darken the tile pane to sit
+   with the dashboard. Deliberately scoped to the tiles — filtering the whole
+   map would invert the markers too, and their colour carries the price band. */
+.fleet-map .leaflet-tile-pane {
+  filter: invert(0.92) hue-rotate(180deg) saturate(0.75) brightness(0.95);
+}
+.fleet-map .leaflet-container {
+  background: #0a0c10;
+}
+.fleet-map .leaflet-control-attribution {
+  background: rgba(15, 18, 24, 0.8);
+  color: #64748b;
+}
+.fleet-map .leaflet-control-attribution a {
+  color: #94a3b8;
+}
+.fleet-map .leaflet-popup-content-wrapper,
+.fleet-map .leaflet-popup-tip {
+  background: #141821;
+  color: #e2e8f0;
+  border: 1px solid #262c38;
+}
+.fleet-map .leaflet-bar a {
+  background: #141821;
+  color: #e2e8f0;
+  border-color: #262c38;
+}
+.fleet-map .leaflet-bar a:hover {
+  background: #1b2029;
+}
