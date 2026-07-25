@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { count, todayLocal } from '../format.js';
 import {
   END_TIME_COLUMN,
+  START_TIME_COLUMN,
   TRIP_ID_HINTS,
   guessColumn,
   looksDateLike,
@@ -98,6 +99,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [savedTripStarts, setSavedTripStarts] = useState(loadTripStarts);
+  const [datingAcknowledged, setDatingAcknowledged] = useState(false);
 
   function handleFile(e) {
     const file = e.target.files?.[0];
@@ -117,6 +119,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
         }
         setHeaders(cols);
         setRows(result.data);
+        setDatingAcknowledged(false);
         setMapping(initialMapping(cols, savedMapping, result.data[0] || {}));
       },
       error: (err) => setError(err.message),
@@ -156,7 +159,14 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
       // later payments import will read. Only a genuine start-time column is
       // accepted, so the payments export's settlement timestamp cannot be
       // recorded as a start time.
-      const tripStarts = rememberTripStarts(loadTripStarts(), usable, {
+      //
+      // Learned from every row, not just the completed ones: the status filter
+      // exists to keep cancelled trips out of the trip count and distance, but
+      // a cancelled trip still has a start time, and the payments export bills
+      // cancellation fees and adjustments against those same trip ids. Learning
+      // only from completed trips left five money-carrying rows with no start
+      // time to match against.
+      const tripStarts = rememberTripStarts(loadTripStarts(), rows, {
         tripIdColumn: mapping.tripId,
         dateColumn: mapping.date,
       });
@@ -210,7 +220,27 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
     rows && mapping.tripId
       ? rows.filter((r) => savedTripStarts[String(r[mapping.tripId] ?? '').trim()]).length
       : 0;
-  const blocked = !hasMeasure || (needsFallbackDate && !fallbackDate);
+  // Rows whose money would land on the wrong day: a trip we have no start time
+  // for, in a file whose only timestamp is when Uber posted the payment.
+  //
+  // Only rows carrying a real amount count. The payments export also lists
+  // zero-value administrative entries — Drive Pass activations, disbursements —
+  // some without a trip id at all, and they are always unmatched. Counting
+  // those would leave the warning permanently on and train it to be ignored.
+  const misdatedRows =
+    rows && mapping.tripId && mapping.date && !START_TIME_COLUMN.test(mapping.date)
+      ? rows.filter((r) => {
+          const id = String(r[mapping.tripId] ?? '').trim();
+          if (!id || savedTripStarts[id]) return false;
+          return Math.abs(Number(String(r[mapping.revenue] ?? '').replace(/[^\d.-]/g, '')) || 0) > 0;
+        }).length
+      : 0;
+  // Importing the payments report before the trip activity report is what put
+  // an overnight fare on the wrong day. The order is not obvious, so it is
+  // caught here rather than left to be noticed in the numbers weeks later.
+  const misdatingRisk = misdatedRows > 0;
+  const blocked =
+    !hasMeasure || (needsFallbackDate && !fallbackDate) || (misdatingRisk && !datingAcknowledged);
 
   return (
     <div className="card">
@@ -269,22 +299,38 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
               after midnight it names the wrong day. Its Trip UUID does not have
               that problem, provided the trip activity export has been imported
               to teach us when the trip began. */}
-          {mapping.tripId && (
+          {mapping.tripId && !misdatingRisk && knownTripIds > 0 && (
             <p className="text-xs text-slate-500 mb-3">
-              {knownTripIds > 0 ? (
-                <>
-                  <span className="num">{count(knownTripIds)}</span> of{' '}
-                  <span className="num">{count(rows.length)}</span> rows match a known trip and
-                  will be dated by when that trip started, not by this file's timestamp.
-                </>
-              ) : (
-                <>
-                  No trips in this file have a known start time. Import the trip activity report
-                  first if you want fares dated by when each trip began — a trip finishing after
-                  midnight is otherwise filed under the following day.
-                </>
-              )}
+              <span className="num">{count(knownTripIds)}</span> of{' '}
+              <span className="num">{count(rows.length)}</span> rows match a known trip and will be
+              dated by when that trip started, not by this file's timestamp.
             </p>
+          )}
+
+          {misdatingRisk && (
+            <div className="mt-1 mb-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-3">
+              <p className="text-sm text-slate-300">
+                <span className="text-warn font-medium">Import the trip activity report first.</span>{' '}
+                This file dates each row by{' '}
+                <span className="num text-slate-400">{mapping.date}</span>, which is when Uber
+                posted the money — after the trip ended. A trip running past midnight would have
+                its fare filed under the following day.
+              </p>
+              <p className="text-xs text-slate-500 mt-2">
+                <span className="num">{count(misdatedRows)}</span> of{' '}
+                <span className="num">{count(rows.length)}</span> rows carry money for a trip with
+                no known start time. Import the trip activity report covering these dates, then
+                load this file again.
+              </p>
+              <label className="flex items-center gap-2 mt-3 text-xs text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={datingAcknowledged}
+                  onChange={(e) => setDatingAcknowledged(e.target.checked)}
+                />
+                Import anyway, dating those rows by payment time
+              </label>
+            </div>
           )}
           <div className="grid sm:grid-cols-2 gap-3">
             {FIELDS.map((f) => (
