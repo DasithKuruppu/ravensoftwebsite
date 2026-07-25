@@ -15,6 +15,7 @@
 import { store, DEFAULT_DRIVER } from '../api/store.mjs';
 import {
   login as dagpsLogin,
+  credentials as dagpsCredentials,
   fetchDailyMileage,
   daysAgoInColombo,
   todayInColombo,
@@ -71,31 +72,6 @@ async function runUber() {
   return { job: 'uber', status: 'not_implemented', written: 0 };
 }
 
-/**
- * Credentials come from SSM SecureString in AWS and from .env locally.
- * The sync Lambda's IAM policy grants it these two parameters and nothing else.
- */
-async function dagpsCredentials() {
-  if (process.env.DAGPS_USER && process.env.DAGPS_PASS) {
-    return { user: process.env.DAGPS_USER, pass: process.env.DAGPS_PASS };
-  }
-  const prefix = process.env.SSM_PREFIX || '/fleet-tracker';
-  const { SSMClient, GetParametersCommand } = await import('@aws-sdk/client-ssm');
-  const client = new SSMClient({ region: process.env.AWS_REGION || 'us-east-1' });
-  const res = await client.send(
-    new GetParametersCommand({
-      Names: [`${prefix}/dagps-user`, `${prefix}/dagps-pass`],
-      WithDecryption: true,
-    }),
-  );
-  const byName = Object.fromEntries((res.Parameters || []).map((p) => [p.Name, p.Value]));
-  const user = byName[`${prefix}/dagps-user`];
-  const pass = byName[`${prefix}/dagps-pass`];
-  if (!user || !pass) {
-    throw new Error(`sync: DAGPS credentials missing from SSM under ${prefix}/`);
-  }
-  return { user, pass };
-}
 
 /**
  * Merge GPS mileage into a day without disturbing revenue or trips.

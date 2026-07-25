@@ -76,4 +76,5 @@ export const api = {
   settings: () => request('GET', '/settings'),
   saveSettings: (settings) => request('PUT', '/settings', settings),
   validate: (month) => request('GET', `/validate?month=${month}`),
+  location: () => request('GET', '/location'),
 };

@@ -185,6 +185,10 @@ export class FleetTrackerStack extends cdk.Stack {
           ssmArn('jwt-secret'),
           ssmArn('owner-password-hash'),
           ssmArn('driver-password-hash'),
+          // The /location route reads the vehicle's live position from the
+          // tracker portal, so the API needs the portal credentials too.
+          ssmArn('dagps-user'),
+          ssmArn('dagps-pass'),
         ],
       }),
     );

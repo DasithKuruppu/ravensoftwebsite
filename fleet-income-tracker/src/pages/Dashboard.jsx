@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { money, amount, count, monthLabel } from '../format.js';
 import MonthNav from '../components/MonthNav.jsx';
 import TierLadder from '../components/TierLadder.jsx';
+import VehicleMap from '../components/VehicleMap.jsx';
 
 export default function Dashboard({ month, setMonth, isOwner }) {
   const [summary, setSummary] = useState(null);
@@ -62,6 +63,9 @@ export default function Dashboard({ month, setMonth, isOwner }) {
             bandStart={summary.plan.bandStart}
             bandEnd={summary.plan.bandEnd}
           />
+
+          {/* Owner-only: the API refuses /location for driver tokens anyway. */}
+          {isOwner && <VehicleMap />}
 
           <div className="grid md:grid-cols-2 gap-5">
             <div className="card">

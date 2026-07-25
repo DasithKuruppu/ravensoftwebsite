@@ -26,6 +26,11 @@ import {
 } from '../shared/commission.mjs';
 import { store, DEFAULT_DRIVER } from './store.mjs';
 import { login, verifyToken, isOwner } from './auth.mjs';
+import {
+  credentials as dagpsCredentials,
+  login as dagpsLogin,
+  fetchLocation,
+} from '../jobs/dagps-client.mjs';
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
   'https://tracker.ravensoft.click,http://localhost:5173')
@@ -143,6 +148,20 @@ async function route(method, path, event, cors) {
   if (method === 'GET' && path === '/validate') {
     if (!isOwner(auth)) return json(403, { error: 'forbidden', message: 'GPS comparison is owner-only' }, cors);
     return json(200, await buildValidation(month), cors);
+  }
+
+  if (method === 'GET' && path === '/location') {
+    if (!isOwner(auth)) {
+      return json(403, { error: 'forbidden', message: 'Vehicle location is owner-only' }, cors);
+    }
+    try {
+      return json(200, await vehicleLocation(), cors);
+    } catch (err) {
+      // The tracker being unreachable or unfixed is an expected state, not a
+      // server fault — the dashboard shows the reason rather than an error page.
+      console.warn('location unavailable:', err.message);
+      return json(200, { available: false, reason: err.message }, cors);
+    }
   }
 
   return json(404, { error: 'not_found', path }, cors);
@@ -313,6 +332,29 @@ export async function importRows(rows) {
   }
 
   return { imported: written.length, skipped, dates: written.map((w) => w.date).sort() };
+}
+
+/**
+ * Last known vehicle position, fetched from the tracker portal.
+ *
+ * The SPA asks once per page load, so the result is cached briefly in the
+ * container: a burst of page loads costs the portal one login rather than one
+ * per view. The cache is deliberately short — a stale position is worse than a
+ * slightly slower page — and the fix's own timestamp is always returned so the
+ * UI can say how old it is.
+ */
+const LOCATION_TTL_MS = 60_000;
+let locationCache = null;
+
+async function vehicleLocation() {
+  if (locationCache && Date.now() - locationCache.at < LOCATION_TTL_MS) {
+    return { ...locationCache.value, cached: true };
+  }
+  const session = await dagpsLogin(await dagpsCredentials());
+  const loc = await fetchLocation(session);
+  const value = { available: true, ...loc };
+  locationCache = { at: Date.now(), value };
+  return { ...value, cached: false };
 }
 
 /* ────────────────────────────── helpers ────────────────────────────── */

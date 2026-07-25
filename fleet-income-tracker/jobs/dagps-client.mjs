@@ -61,6 +61,32 @@ const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
 
 /**
+ * Portal credentials: SSM SecureString in AWS, .env locally.
+ * Both the sync job and the API's location route read them through here.
+ */
+export async function credentials() {
+  if (process.env.DAGPS_USER && process.env.DAGPS_PASS) {
+    return { user: process.env.DAGPS_USER, pass: process.env.DAGPS_PASS };
+  }
+  const prefix = process.env.SSM_PREFIX || '/fleet-tracker';
+  const { SSMClient, GetParametersCommand } = await import('@aws-sdk/client-ssm');
+  const client = new SSMClient({ region: process.env.AWS_REGION || 'us-east-1' });
+  const res = await client.send(
+    new GetParametersCommand({
+      Names: [`${prefix}/dagps-user`, `${prefix}/dagps-pass`],
+      WithDecryption: true,
+    }),
+  );
+  const byName = Object.fromEntries((res.Parameters || []).map((p) => [p.Name, p.Value]));
+  const user = byName[`${prefix}/dagps-user`];
+  const pass = byName[`${prefix}/dagps-pass`];
+  if (!user || !pass) {
+    throw new Error(`dagps: credentials missing from SSM under ${prefix}/ (see deploy.md section 4)`);
+  }
+  return { user, pass };
+}
+
+/**
  * Log in by plate number / IMEI.
  * @param {{ user: string, pass: string }} creds
  * @returns {Promise<{ mds: string, cookie: string, enterpriseId: string }>}
@@ -130,6 +156,67 @@ async function fetchEnterpriseId({ mds, cookie, landingPath }) {
     throw new Error('dagps: could not find enterprise_id on the landing page — portal markup may have changed');
   }
   return uuid[1];
+}
+
+/**
+ * Last known position of the vehicle.
+ *
+ * The portal's dashboard calls loadUser on load; the payload carries the live
+ * fix alongside the device metadata. Field names are pinyin:
+ *   jingdu = 经度 = longitude,  weidu = 纬度 = latitude,  sudu = 速度 = speed.
+ *
+ * `datetime` is the fix time and `heart_time` the last device heartbeat, both
+ * formatted yyyy/MM/dd HH:mm:ss in Asia/Colombo. A tracker that has lost signal
+ * keeps reporting its last fix, so always show the timestamp next to the point.
+ *
+ * @returns {Promise<{lat:number, lng:number, speedKmh:number, fixedAt:string|null,
+ *                    plate:string|null, deviceId:string|null}>}
+ */
+export async function fetchLocation(session) {
+  const url =
+    `${DATA_URL}?method=loadUser&mds=${encodeURIComponent(session.mds)}` +
+    `&callback=cb&user_id=${encodeURIComponent(session.enterpriseId)}`;
+
+  const res = await fetch(url, {
+    headers: { 'user-agent': UA, cookie: session.cookie, referer: `${BASE}/user/indexp.aspx` },
+  });
+  const text = await res.text();
+
+  // JSONP: cb({...}) — unwrap before parsing.
+  let payload;
+  try {
+    payload = JSON.parse(text.replace(/^[^(]*\(/, '').replace(/\);?\s*$/, ''));
+  } catch {
+    throw new Error('dagps: could not parse loadUser response — session may have expired');
+  }
+
+  const d = payload.data?.[0];
+  if (!d) throw new Error('dagps: loadUser returned no device');
+
+  const lat = Number(d.weidu);
+  const lng = Number(d.jingdu);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+    throw new Error('dagps: device has no position fix yet');
+  }
+
+  return {
+    lat,
+    lng,
+    speedKmh: Number(d.sudu) || 0,
+    fixedAt: toIso(d.datetime),
+    heartbeatAt: toIso(d.heart_time),
+    plate: d.user_name || null,
+    deviceId: d.sim_id || null,
+  };
+}
+
+/** "2026/07/25 11:09:55" (Asia/Colombo) → ISO 8601 with offset. */
+function toIso(value) {
+  if (!value) return null;
+  const m = String(value).match(/^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const [, y, mo, d, h, mi, s] = m;
+  return `${y}-${mo}-${d}T${h}:${mi}:${s}+05:30`;
 }
 
 /** Midnight of `date` (yyyy-mm-dd) in Asia/Colombo, as epoch milliseconds. */
