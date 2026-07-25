@@ -77,6 +77,16 @@ export default function ProjectionChart({ summary }) {
   // Hover reads the day off both finishes, so the difference is legible.
   const at = (pts, day) => pts.find((p) => p.day === day)?.pay ?? null;
 
+  // Two finishes a few hundred rupees apart land a few pixels apart, and their
+  // labels printed on top of each other. Spread them to a legible minimum gap,
+  // keeping their order, and leave the dots on the true values with a leader
+  // line to whichever label has moved — the label may shift, the data may not.
+  const endLabels = spreadLabels(
+    drawable.map((sc) => ({ key: sc.key, colour: COLOUR[sc.key], value: sc.endPay, y: y(sc.endPay) })),
+    PAD.top,
+    PAD.top + innerH,
+  );
+
   return (
     <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
@@ -141,9 +151,9 @@ export default function ProjectionChart({ summary }) {
           <line x1={x(today.day)} x2={x(today.day)} y1={PAD.top} y2={PAD.top + innerH} stroke="#3a4150" strokeWidth="1" />
           <circle cx={x(today.day)} cy={y(today.pay)} r="4.5" fill={ACTUAL} stroke="#141821" strokeWidth="2" />
 
-          {/* end points, labelled directly — the two numbers that matter */}
-          {drawable.map((sc) => (
-            <EndLabel key={sc.key} x={x(lastDay)} y={y(sc.endPay)} colour={COLOUR[sc.key]} value={sc.endPay} width={width} />
+          {/* end points, labelled directly — the numbers that matter */}
+          {endLabels.map((l) => (
+            <EndLabel key={l.key} x={x(lastDay)} y={l.y} labelY={l.labelY} colour={l.colour} value={l.value} width={width} />
           ))}
 
           {/* Every day is labelled, thinning to every 2nd or 3rd only when the
@@ -199,14 +209,21 @@ export default function ProjectionChart({ summary }) {
 }
 
 /** Direct label at a line's end — selective labelling, not one per point. */
-function EndLabel({ x, y, colour, value, width }) {
+function EndLabel({ x, y, labelY, colour, value, width }) {
   const flip = x > width - 90;
+  const tx = flip ? x - 8 : x + 8;
+  const moved = Math.abs(labelY - y) > 2;
   return (
     <g>
+      {/* A leader only when the label has been nudged off its value, so the
+          reader can see which line it belongs to. */}
+      {moved && (
+        <line x1={x} y1={y} x2={tx} y2={labelY - 4} stroke={colour} strokeWidth="1" opacity="0.5" />
+      )}
       <circle cx={x} cy={y} r="4" fill={colour} stroke="#141821" strokeWidth="2" />
       <text
-        x={flip ? x - 8 : x + 8}
-        y={y - 8}
+        x={tx}
+        y={labelY}
         textAnchor={flip ? 'end' : 'start'}
         fontSize="11"
         fill="#e2e8f0"
@@ -216,6 +233,34 @@ function EndLabel({ x, y, colour, value, width }) {
       </text>
     </g>
   );
+}
+
+/**
+ * Nudge labels apart so none overlaps, preserving their vertical order.
+ *
+ * A pass down the list pushes each label clear of the one above; if that runs
+ * the stack past the bottom of the plot the whole stack shifts back up, then a
+ * pass up the list re-separates anything the shift squashed. Positions are
+ * returned on the input objects as `labelY`; `y` — the real value — is
+ * untouched.
+ */
+function spreadLabels(items, top, bottom, gap = 14) {
+  const sorted = [...items].sort((a, b) => a.y - b.y);
+  if (!sorted.length) return items;
+
+  sorted[0].labelY = Math.max(sorted[0].y - 8, top + 10);
+  for (let i = 1; i < sorted.length; i++) {
+    sorted[i].labelY = Math.max(sorted[i].y - 8, sorted[i - 1].labelY + gap);
+  }
+
+  const overflow = sorted[sorted.length - 1].labelY - bottom;
+  if (overflow > 0) {
+    for (const it of sorted) it.labelY -= overflow;
+    for (let i = sorted.length - 2; i >= 0; i--) {
+      sorted[i].labelY = Math.min(sorted[i].labelY, sorted[i + 1].labelY - gap);
+    }
+  }
+  return items;
 }
 
 function Key({ colour, label, dashed }) {
