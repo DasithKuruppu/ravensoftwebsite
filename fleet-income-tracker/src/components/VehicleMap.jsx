@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { api } from '../api.js';
 import { nearest, rateNow, bandAt, TOU_BANDS, HOME_TOU } from '../../shared/chargers.mjs';
-import { amount } from '../format.js';
+import { amount, ago } from '../format.js';
 
 /**
  * Vehicle position plus the nearest CCS2 chargers.
@@ -426,14 +426,8 @@ function Chip({ tone, children, title }) {
  * timezone, and we did not: it stamps +05:00, not Colombo's +05:30.
  */
 function Ago({ iso, ageSeconds }) {
-  let ms;
-  if (ageSeconds !== null && ageSeconds !== undefined) ms = ageSeconds * 1000;
-  else if (iso) ms = Date.now() - Date.parse(iso);
-  if (!Number.isFinite(ms)) return <span>time unknown</span>;
-  const mins = Math.round(ms / 60000);
-  const text =
-    mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 1440 ? `${Math.round(mins / 60)} h ago` : `${Math.round(mins / 1440)} d ago`;
-  return <span className={mins > 30 ? 'text-warn' : 'text-slate-400'}>{text}</span>;
+  const { text, minutes } = ago(iso, ageSeconds);
+  return <span className={minutes > 30 ? 'text-warn' : 'text-slate-400'}>{text}</span>;
 }
 
 function Card({ children }) {

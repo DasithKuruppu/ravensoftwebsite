@@ -368,6 +368,8 @@ async function buildSummary(month, auth) {
     // extrapolates, so the two figures always agree with each other.
     // Per day actually worked, so time off does not read as a bad day.
     dailyAverage: round2(dailyRate),
+    // When any of this last changed — an import, a GPS sync or a hand edit.
+    lastUpdated: latestUpdate(entries),
     // Today so far. Incomplete by definition — the car is still out — so it is
     // shown as a running total rather than compared against a target the way
     // yesterday is.
@@ -675,6 +677,22 @@ function yesterdayRevenue(entries) {
     .toISOString()
     .slice(0, 10);
   return dayRevenue(entries, date);
+}
+
+/**
+ * The most recent write to any day in the month.
+ *
+ * Every figure on the dashboard is derived from imported data, so a number is
+ * only as current as the last import. Without this the page looks live when it
+ * may be showing figures from three days ago. Entries written before this was
+ * recorded have no timestamp and are skipped rather than counted as ancient.
+ */
+function latestUpdate(entries) {
+  let best = null;
+  for (const e of entries) {
+    if (e.updatedAt && (!best || e.updatedAt > best.updatedAt)) best = e;
+  }
+  return best ? { at: best.updatedAt, date: best.date, source: best.source || 'manual' } : null;
 }
 
 /** One day's figures, or null when nothing has been recorded for it yet. */

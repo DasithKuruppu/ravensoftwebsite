@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
-import { money, amount, count, monthLabel } from '../format.js';
+import { money, amount, count, monthLabel, ago, stamp } from '../format.js';
 import MonthNav from '../components/MonthNav.jsx';
 import TierLadder from '../components/TierLadder.jsx';
 import VehicleMap from '../components/VehicleMap.jsx';
@@ -57,6 +57,7 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
           <Section
             title={`This month · ${monthLabel(month)}`}
             subtitle={`${count(summary.elapsedDays)} of ${count(summary.operatingDays)} operating days`}
+            meta={<LastUpdated last={summary.lastUpdated} />}
           >
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <Stat label="Total revenue (LKR)" value={amount(summary.revenue)} accent />
@@ -208,15 +209,36 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
  * cards mixing what has happened with what is forecast; the headings say which
  * you are looking at.
  */
-function Section({ title, subtitle, children }) {
+function Section({ title, subtitle, meta, children }) {
   return (
     <section className="space-y-5">
-      <div className="flex items-baseline gap-3 border-b border-ink-800 pb-2">
+      <div className="flex items-baseline gap-x-3 gap-y-1 flex-wrap border-b border-ink-800 pb-2">
         <h2 className="text-xs uppercase tracking-[0.18em] text-slate-400">{title}</h2>
         {subtitle && <span className="text-xs text-slate-600">{subtitle}</span>}
+        {meta && <span className="sm:ml-auto text-xs">{meta}</span>}
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * When the figures were last written to.
+ *
+ * Amber past a day: the dashboard is only as current as the last import, and a
+ * projection built on stale days is confidently wrong rather than merely old.
+ */
+function LastUpdated({ last }) {
+  if (!last) return <span className="text-slate-600">never updated</span>;
+  const { text, minutes } = ago(last.at);
+  const how = { csv: 'CSV import', api: 'Uber API', gps: 'GPS sync', manual: 'hand entry' }[last.source] || last.source;
+  return (
+    <span
+      className={minutes >= 1440 ? 'text-warn' : 'text-slate-500'}
+      title={`${stamp(last.at)} — ${how}, for ${last.date}`}
+    >
+      updated {text}
+    </span>
   );
 }
 
