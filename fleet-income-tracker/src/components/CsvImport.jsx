@@ -2,9 +2,37 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { api } from '../api.js';
 import { count, todayLocal } from '../format.js';
+import {
+  END_TIME_COLUMN,
+  TRIP_ID_HINTS,
+  guessColumn,
+  looksDateLike,
+  rememberTripStarts,
+  resolveRowDate,
+} from '../csvMapping.mjs';
+
+const TRIP_STARTS_KEY = 'fleet.tripStarts';
 
 const FIELDS = [
-  { key: 'date', label: 'Date', required: false, hints: ['trip date', 'request time', 'local date', 'date', 'day', 'reporting'] },
+  {
+    key: 'date',
+    label: 'Date / trip start time',
+    required: false,
+    // Start times first, and end times excluded outright: a day's income is the
+    // income from the trips that STARTED that day, so a trip running 23:40 to
+    // 00:20 belongs to the day it began. Without the exclusion the generic
+    // "date" hint settles on "Trip drop-off time" in any file without a request
+    // time, moving that fare to the next day — and, at a month boundary, into
+    // the next commission month.
+    hints: ['trip request time', 'request time', 'pick-up time', 'trip date', 'local date', 'date', 'day', 'reporting'],
+    exclude: END_TIME_COLUMN,
+  },
+  {
+    key: 'tripId',
+    label: 'Trip ID (dates payments by trip start)',
+    required: false,
+    hints: TRIP_ID_HINTS,
+  },
   { key: 'revenue', label: 'Revenue / driver earnings', required: false, hints: ['total earnings', 'earning', 'fare', 'revenue', 'payout', 'amount'], numeric: true },
   { key: 'trips', label: 'Trips (optional)', required: false, hints: ['trips taken', 'trip count', 'trips', 'rides', 'count'], numeric: true },
   { key: 'uberKm', label: 'Distance km (optional)', required: false, hints: ['trip distance', 'distance', 'km', 'mileage'], numeric: true },
@@ -32,35 +60,27 @@ const RATE_COLUMN = /(\/|\bper\b|\brate\b)/i;
  */
 const COMPLETED = /^\s*completed\s*$/i;
 
-/**
- * A numeric field must never auto-map to a column of identifiers. "Trip UUID"
- * matches a naive "trip" hint and would be parsed into a nonsense trip count,
- * so candidates are checked against a real value from the file first.
- */
-function looksNumeric(sample) {
-  if (sample === undefined || sample === null) return false;
-  const raw = String(sample).trim();
-  if (!raw) return false;
-  // Tolerate a currency prefix, but any other letter means this is an
-  // identifier, a plate, a status or a timestamp — never a measure.
-  const withoutCurrency = raw.replace(/^(lkr|rs\.?|usd|\$|₨)\s*/i, '');
-  if (/[a-z]/i.test(withoutCurrency)) return false;
-  const cleaned = withoutCurrency.replace(/[,\s]/g, '');
-  return /^-?\d+(\.\d+)?$/.test(cleaned);
-}
-
-/**
- * Report exports do not agree on what the date column is called — "Trip request
- * time" in trip activity, "vs reporting" in the payments export. When no hint
- * matches, fall back to any column whose sample value actually parses as a date.
- */
-function looksDateLike(sample) {
-  if (sample === undefined || sample === null) return false;
-  const raw = String(sample).trim();
-  return /^\d{4}-\d{2}-\d{2}/.test(raw) || /^\d{1,2}[/-]\d{1,2}[/-]\d{4}/.test(raw);
-}
-
 const BATCH_SIZE = 200;
+
+/** The remembered trip-start lookup survives reloads and separate imports. */
+function loadTripStarts() {
+  try {
+    const raw = localStorage.getItem(TRIP_STARTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTripStarts(map) {
+  try {
+    localStorage.setItem(TRIP_STARTS_KEY, JSON.stringify(map));
+  } catch {
+    // A full quota is not worth failing an import over; attribution simply
+    // falls back to the row's own timestamp next time.
+  }
+}
 
 /**
  * Two-step CSV import for Uber Fleet Portal exports:
@@ -77,6 +97,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
   const [status, setStatus] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [savedTripStarts, setSavedTripStarts] = useState(loadTripStarts);
 
   function handleFile(e) {
     const file = e.target.files?.[0];
@@ -110,22 +131,12 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
         next[field.key] = saved[field.key];
         continue;
       }
-      const eligible = cols.filter(
-        (c) => !RATE_COLUMN.test(c) && (!field.numeric || looksNumeric(sampleRow[c])),
-      );
-      // Hints are ordered most- to least-specific; take the first that hits.
-      // Matching starts at a word boundary so "count" cannot match inside
-      // "Bank Account", while still allowing "earning" to hit "Your earnings".
-      let guess = '';
-      for (const hint of field.hints) {
-        const re = new RegExp(`\\b${hint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
-        guess = eligible.find((c) => re.test(c));
-        if (guess) break;
-      }
+      let guess = guessColumn(field, cols, sampleRow, { skip: RATE_COLUMN });
       // The date column is named differently in every export, so recognise it
-      // by its contents when the name gives nothing away.
+      // by its contents when the name gives nothing away — still refusing any
+      // column that describes when a trip ended.
       if (!guess && field.key === 'date') {
-        guess = cols.find((c) => looksDateLike(sampleRow[c])) || '';
+        guess = cols.find((c) => !END_TIME_COLUMN.test(c) && looksDateLike(sampleRow[c])) || '';
       }
       next[field.key] = guess || '';
     }
@@ -140,17 +151,34 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
       const usable = mapping.status ? rows.filter((r) => COMPLETED.test(r[mapping.status] || '')) : rows;
       const excluded = rows.length - usable.length;
 
+      // Learn this file's trip start times before dating its rows, so a file
+      // carrying both — the trip activity export — teaches the lookup that a
+      // later payments import will read. Only a genuine start-time column is
+      // accepted, so the payments export's settlement timestamp cannot be
+      // recorded as a start time.
+      const tripStarts = rememberTripStarts(loadTripStarts(), usable, {
+        tripIdColumn: mapping.tripId,
+        dateColumn: mapping.date,
+      });
+      saveTripStarts(tripStarts);
+      setSavedTripStarts(tripStarts);
+
+      const basisCount = { tripStart: 0, timestamp: 0, timestampUnmatched: 0, fallback: 0, unreadable: 0 };
       const normalised = usable
-        .map((r) => ({
+        .map((r) => {
           // Uber's fleet summary export has no date column — every row belongs
-          // to the reporting period chosen in the portal, so the date is
-          // supplied here instead.
-          date: mapping.date ? r[mapping.date] : fallbackDate,
-          revenue: r[mapping.revenue],
-          trips: mapping.trips ? r[mapping.trips] : undefined,
-          uberKm: mapping.uberKm ? r[mapping.uberKm] : undefined,
-          cashCollected: mapping.cashCollected ? r[mapping.cashCollected] : undefined,
-        }))
+          // to the reporting period chosen in the portal, so the date falls
+          // back to the one picked below.
+          const { date, basis } = resolveRowDate(r, { mapping, tripStarts, fallbackDate });
+          if (basis in basisCount) basisCount[basis] += 1;
+          return {
+            date,
+            revenue: r[mapping.revenue],
+            trips: mapping.trips ? r[mapping.trips] : undefined,
+            uberKm: mapping.uberKm ? r[mapping.uberKm] : undefined,
+            cashCollected: mapping.cashCollected ? r[mapping.cashCollected] : undefined,
+          };
+        })
         .filter((r) => r.date);
 
       let imported = 0;
@@ -162,7 +190,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
       }
 
       if (canSaveMapping) await onSaveMapping(mapping);
-      setStatus({ imported, skipped, total: normalised.length, excluded });
+      setStatus({ imported, skipped, total: normalised.length, excluded, basis: basisCount });
       setRows(null);
       setHeaders([]);
       onImported?.();
@@ -177,6 +205,11 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
   // least one measure — earnings or distance — but not necessarily both.
   const hasMeasure = Boolean(mapping.revenue || mapping.uberKm);
   const needsFallbackDate = !mapping.date;
+  // How many of this file's rows we already know the start time for.
+  const knownTripIds =
+    rows && mapping.tripId
+      ? rows.filter((r) => savedTripStarts[String(r[mapping.tripId] ?? '').trim()]).length
+      : 0;
   const blocked = !hasMeasure || (needsFallbackDate && !fallbackDate);
 
   return (
@@ -203,7 +236,26 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
           Imported <span className="num">{count(status.imported)}</span> day(s) from{' '}
           <span className="num">{count(status.total)}</span> rows
           {status.excluded > 0 && ` · ${status.excluded} cancelled trip(s) excluded`}
-          {status.skipped > 0 && ` · ${status.skipped} row(s) skipped (unreadable date)`}.
+          {(status.skipped > 0 || status.basis?.unreadable > 0) &&
+            ` · ${status.skipped + (status.basis?.unreadable || 0)} row(s) skipped (unreadable date)`}
+          .
+          {/* Which day each row was filed under, and on what evidence — the one
+              thing that decides whether a late-night fare lands on the right
+              day. */}
+          {status.basis?.tripStart > 0 && (
+            <span className="block text-xs text-slate-400 mt-1">
+              <span className="num">{count(status.basis.tripStart)}</span> row(s) dated by trip
+              start time
+              {status.basis.timestampUnmatched > 0 && (
+                <>
+                  {' · '}
+                  <span className="num">{count(status.basis.timestampUnmatched)}</span> by the
+                  file's own timestamp (no matching trip)
+                </>
+              )}
+              .
+            </span>
+          )}
         </p>
       )}
 
@@ -212,6 +264,28 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
           <p className="text-sm text-slate-400 mt-4 mb-2">
             Map the CSV columns. Per-trip rows are summed into one entry per date.
           </p>
+          {/* The payments export's only timestamp is when Uber posted the
+              money, which is after the trip ended — so for a trip finishing
+              after midnight it names the wrong day. Its Trip UUID does not have
+              that problem, provided the trip activity export has been imported
+              to teach us when the trip began. */}
+          {mapping.tripId && (
+            <p className="text-xs text-slate-500 mb-3">
+              {knownTripIds > 0 ? (
+                <>
+                  <span className="num">{count(knownTripIds)}</span> of{' '}
+                  <span className="num">{count(rows.length)}</span> rows match a known trip and
+                  will be dated by when that trip started, not by this file's timestamp.
+                </>
+              ) : (
+                <>
+                  No trips in this file have a known start time. Import the trip activity report
+                  first if you want fares dated by when each trip began — a trip finishing after
+                  midnight is otherwise filed under the following day.
+                </>
+              )}
+            </p>
+          )}
           <div className="grid sm:grid-cols-2 gap-3">
             {FIELDS.map((f) => (
               <div key={f.key} className="grid gap-1">

@@ -21,6 +21,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['shared/**/*.test.mjs', 'api/**/*.test.mjs', 'jobs/**/*.test.mjs'],
+    include: ['shared/**/*.test.mjs', 'api/**/*.test.mjs', 'jobs/**/*.test.mjs', 'src/**/*.test.mjs'],
   },
 });
