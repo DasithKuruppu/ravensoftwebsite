@@ -54,6 +54,10 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
               </span>
             </div>
           )}
+          <Section
+            title={`This month · ${monthLabel(month)}`}
+            subtitle={`${count(summary.elapsedDays)} of ${count(summary.operatingDays)} operating days`}
+          >
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <Stat label="Total revenue (LKR)" value={amount(summary.revenue)} accent />
             <Stat label="Daily average (LKR)" value={amount(summary.dailyAverage)} />
@@ -161,20 +165,47 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
 
             {isOwner && summary.costs && <RunningCosts summary={summary} />}
 
-            <NextMonth summary={summary} isOwner={isOwner} />
-
-            {isOwner && summary.costs && <ReturnOnCapital summary={summary} />}
           </div>
+          </Section>
+
+          <Section
+            title={`Next month · ${monthLabel(`${summary.nextMonth?.month || month}-01`)}`}
+            subtitle="at the current daily rate, on full commission bands"
+          >
+            <div className="grid md:grid-cols-2 gap-5 items-start">
+              <NextMonth summary={summary} isOwner={isOwner} />
+              {isOwner && summary.costs && <ReturnOnCapital summary={summary} />}
+            </div>
+          </Section>
 
           {/* Last on the page: the money figures are what the dashboard is for,
               and the map is the tallest block — putting it above them pushed
               everything else below the fold.
               Shown to both roles — the driver sees the same position the owner
               does, rather than being tracked one-way. */}
-          <VehicleMap />
+          <Section title="Vehicle" subtitle="where the car is, and where to charge it">
+            <VehicleMap />
+          </Section>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A titled band of the page. The dashboard had grown into an unbroken run of
+ * cards mixing what has happened with what is forecast; the headings say which
+ * you are looking at.
+ */
+function Section({ title, subtitle, children }) {
+  return (
+    <section className="space-y-5">
+      <div className="flex items-baseline gap-3 border-b border-ink-800 pb-2">
+        <h2 className="text-xs uppercase tracking-[0.18em] text-slate-400">{title}</h2>
+        {subtitle && <span className="text-xs text-slate-600">{subtitle}</span>}
+      </div>
+      {children}
+    </section>
   );
 }
 
