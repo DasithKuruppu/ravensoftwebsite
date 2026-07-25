@@ -291,9 +291,24 @@ function Pick({ title, tone, charger }) {
       <div className="text-sm text-slate-200 mt-1 truncate" title={charger.name}>
         {charger.name}
       </div>
-      <div className={`num text-lg mt-0.5 ${rate ? rateClass(rate) : 'text-slate-600'}`}>
-        {rate ? `LKR ${amount(rate)}` : 'rate unknown'}
-        {rate && <span className="text-xs text-slate-500"> /kWh</span>}
+      <div className="flex items-end justify-between gap-2 mt-0.5">
+        <div className={`num text-lg ${rate ? rateClass(rate) : 'text-slate-600'}`}>
+          {rate ? `LKR ${amount(rate)}` : 'rate unknown'}
+          {rate && <span className="text-xs text-slate-500"> /kWh</span>}
+        </div>
+        {/* The point of surfacing a station is to go to it, so the action sits
+            on the recommendation rather than only in the list below. */}
+        <a
+          href={directionsUrl(charger.lat, charger.lng)}
+          target="_blank"
+          rel="noreferrer"
+          className={`btn text-xs px-2 py-1 shrink-0 ${
+            accent ? 'btn-primary' : ''
+          }`}
+          title={`Directions to ${charger.name}`}
+        >
+          Directions
+        </a>
       </div>
     </div>
   );
