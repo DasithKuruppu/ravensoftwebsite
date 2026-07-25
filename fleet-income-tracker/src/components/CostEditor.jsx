@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
-import { COST_CATEGORIES, COST_FREQUENCIES, DEFAULT_COSTS, costsForMonth } from '../../shared/costs.mjs';
+import {
+  COST_CATEGORIES,
+  COST_FREQUENCIES,
+  DEFAULT_COSTS,
+  costsForMonth,
+  remainingTerm,
+} from '../../shared/costs.mjs';
 import { amount } from '../format.js';
 import { currentMonth } from '../format.js';
 
@@ -29,7 +35,13 @@ export default function CostEditor() {
     setError('');
     setStatus('');
     try {
-      const res = await api.saveCosts(rows.map((r) => ({ ...r, amount: Number(r.amount) || 0 })));
+      const res = await api.saveCosts(
+        rows.map((r) => ({
+          ...r,
+          amount: Number(r.amount) || 0,
+          termMonths: r.termMonths ? Number(r.termMonths) : null,
+        })),
+      );
       setRows(res.costs);
       setStatus(`Saved ${res.costs.length} lines.`);
     } catch (e) {
@@ -56,20 +68,27 @@ export default function CostEditor() {
         Yearly costs are spread across twelve months; one-offs count only in the month of their
         date. <span className="text-slate-400">Per day driven</span> and{' '}
         <span className="text-slate-400">per km driven</span> scale with what the car actually did,
-        so a quiet month costs less — days off are not counted. The driver never sees any of this.
+        so a quiet month costs less — days off are not counted.
+        <br />
+        For something that ends — a lease — set{' '}
+        <span className="text-slate-400">every month</span>, give it a start date, and put the
+        number of instalments in <span className="text-slate-400">For (months)</span>: 60 for five
+        years. It then stops when the term does, and the return-on-capital view averages it across
+        the years you keep the car. The driver never sees any of this.
       </p>
 
       {error && <Banner>{error}</Banner>}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[44rem]">
+        <table className="w-full text-sm">
           <thead>
             <tr>
               <th className="th">Cost</th>
               <th className="th">Category</th>
               <th className="th">How often</th>
               <th className="th text-right">Amount</th>
-              <th className="th">Date</th>
+              <th className="th">Starts / on</th>
+              <th className="th text-right">Months</th>
               <th className="th text-right">Per month</th>
               <th className="th"></th>
             </tr>
@@ -78,27 +97,62 @@ export default function CostEditor() {
             {rows.map((r, i) => (
               <tr key={r.id || i}>
                 <td className="td">
-                  <input className="w-full px-2 py-1 text-sm min-w-[9rem]" value={r.label || ''} onChange={(e) => patch(i, 'label', e.target.value)} />
+                  <input className="w-full px-2 py-1 text-sm min-w-[7rem]" value={r.label || ''} onChange={(e) => patch(i, 'label', e.target.value)} />
                 </td>
                 <td className="td">
-                  <select value={r.category || 'other'} onChange={(e) => patch(i, 'category', e.target.value)} className="text-sm py-1">
+                  <select className="text-sm py-1 px-1" value={r.category || 'other'} onChange={(e) => patch(i, 'category', e.target.value)} className="text-sm py-1">
                     {COST_CATEGORIES.map((c) => (
                       <option key={c.key} value={c.key}>{c.label}</option>
                     ))}
                   </select>
                 </td>
                 <td className="td">
-                  <select value={r.frequency || 'monthly'} onChange={(e) => patch(i, 'frequency', e.target.value)} className="text-sm py-1">
+                  <select value={r.frequency || 'monthly'} onChange={(e) => patch(i, 'frequency', e.target.value)} className="text-sm py-1 px-1">
                     {COST_FREQUENCIES.map((f) => (
                       <option key={f.key} value={f.key}>{f.label}</option>
                     ))}
                   </select>
                 </td>
                 <td className="td">
-                  <input className="num w-full px-2 py-1 text-sm text-right min-w-[6rem]" value={r.amount ?? ''} onChange={(e) => patch(i, 'amount', e.target.value)} />
+                  <input className="num w-full px-2 py-1 text-sm text-right min-w-[4.5rem]" value={r.amount ?? ''} onChange={(e) => patch(i, 'amount', e.target.value)} />
                 </td>
                 <td className="td">
-                  <input type="date" className="text-sm py-1" value={r.date || ''} onChange={(e) => patch(i, 'date', e.target.value || null)} />
+                  <input
+                    type="date"
+                    className="text-sm py-1 px-1"
+                    value={r.date || ''}
+                    onChange={(e) => patch(i, 'date', e.target.value || null)}
+                    title={
+                      r.frequency === 'once'
+                        ? 'The day this cost was incurred'
+                        : 'When this cost started — a term is counted from here'
+                    }
+                  />
+                </td>
+                <td className="td text-right">
+                  {/* Only recurring costs can have a term. A lease of 60 here,
+                      with a start date, stops after the last instalment and is
+                      levelled across the holding period in the ROI. */}
+                  {r.frequency === 'monthly' ? (
+                    <>
+                      <input
+                        className="num w-full px-2 py-1 text-sm text-right min-w-[3.5rem]"
+                        placeholder="—"
+                        value={r.termMonths ?? ''}
+                        onChange={(e) => patch(i, 'termMonths', e.target.value === '' ? null : e.target.value)}
+                      />
+                      {r.termMonths && !r.date && (
+                        <div className="text-[10px] text-warn mt-0.5">needs a start date</div>
+                      )}
+                      {r.termMonths && r.date && (
+                        <div className="text-[10px] text-slate-600 mt-0.5 num">
+                          {remainingTerm({ ...r, termMonths: Number(r.termMonths) }, currentMonth())} left
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-xs text-slate-700">—</span>
+                  )}
                 </td>
                 <td className="td num text-right text-slate-400">
                   {amount(preview.items.find((x) => x.id === r.id)?.monthly ?? 0)}
@@ -121,7 +175,7 @@ export default function CostEditor() {
         <button
           className="btn"
           onClick={() =>
-            setRows([...rows, { id: `cost-${Date.now()}`, label: '', category: 'other', frequency: 'monthly', amount: 0, date: null }])
+            setRows([...rows, { id: `cost-${Date.now()}`, label: '', category: 'other', frequency: 'monthly', amount: 0, date: null, termMonths: null }])
           }
         >
           Add cost

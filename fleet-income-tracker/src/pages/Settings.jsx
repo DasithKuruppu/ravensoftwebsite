@@ -78,7 +78,7 @@ export default function Settings() {
   const matches = live.total === CHECK_EXPECTED;
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className="max-w-6xl space-y-5">
       {error && <Banner>{error}</Banner>}
 
       <form onSubmit={save} className="card space-y-4">
