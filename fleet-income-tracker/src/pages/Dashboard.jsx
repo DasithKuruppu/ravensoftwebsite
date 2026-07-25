@@ -49,7 +49,7 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
             </div>
           )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Stat label="Revenue MTD (LKR)" value={amount(summary.revenue)} accent />
+            <Stat label="Total revenue (LKR)" value={amount(summary.revenue)} accent />
             <Stat label="Trips" value={count(summary.trips)} />
             <Stat
               label="Days logged"

@@ -3,7 +3,7 @@ import { amount, money } from '../format.js';
 /**
  * Horizontal tier ladder:
  *   shaded zones for 0–bandStart / band / above bandEnd,
- *   a solid fill for month-to-date revenue,
+ *   a solid fill for revenue so far this month,
  *   a dashed marker at the projected month-end revenue.
  */
 export default function TierLadder({ revenue, projected, bandStart, bandEnd }) {
@@ -61,7 +61,7 @@ export default function TierLadder({ revenue, projected, bandStart, bandEnd }) {
 
       <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-xs text-slate-400">
         <Legend className="bg-white/[0.18] border border-accent">
-          MTD <span className="num text-slate-200">{amount(revenue)}</span>
+          Total <span className="num text-slate-200">{amount(revenue)}</span>
         </Legend>
         <Legend className="border-l-2 border-dashed border-slate-100">
           Projected <span className="num text-slate-200">{amount(projected)}</span>
