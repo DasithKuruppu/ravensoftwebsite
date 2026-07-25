@@ -93,28 +93,15 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
               is the one card written for the driver rather than the owner. */}
           <PushToTier summary={summary} />
 
-          {/* Driver-only, and placed high: it is the one cost he can act on,
-              and it was previously six cards down where he would never see it.
-              The owner sees charging inside the full ledger instead. */}
-          {!isOwner && <DirectCosts summary={summary} />}
-
           <ProjectionChart summary={summary} />
 
-          {/* Owner-only; the API omits these fields for a driver token. */}
-          <div className="grid md:grid-cols-2 gap-5">
-            <NextMonth summary={summary} isOwner={isOwner} />
-            {isOwner && summary.costs && <ReturnOnCapital summary={summary} />}
-          </div>
-
-          {isOwner && summary.costs && (
-            <div className="grid md:grid-cols-2 gap-5">
-              <RunningCosts summary={summary} />
-            </div>
-          )}
-
-          <div className="grid md:grid-cols-2 gap-5">
-            <CashSplit summary={summary} />
-
+          {/* One flowing two-column grid rather than a series of ad-hoc rows.
+              Two of those rows previously held a single card, which rendered as
+              a half-width orphan with dead space beside it. Here the cards fill
+              left to right in a fixed order, so the columns line up whatever
+              mix of cards a role happens to see. `items-start` keeps each card
+              its natural height instead of stretching to match its neighbour. */}
+          <div className="grid md:grid-cols-2 gap-5 items-start">
             <div className="card">
               <h2 className="label mb-3">{summary.driverName} pay at current revenue</h2>
               <dl className="space-y-2">
@@ -166,6 +153,17 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
                 </p>
               )}
             </div>
+
+            {/* Driver-only: the one cost he can act on. */}
+            {!isOwner && <DirectCosts summary={summary} />}
+
+            <CashSplit summary={summary} />
+
+            {isOwner && summary.costs && <RunningCosts summary={summary} />}
+
+            <NextMonth summary={summary} isOwner={isOwner} />
+
+            {isOwner && summary.costs && <ReturnOnCapital summary={summary} />}
           </div>
 
           {/* Last on the page: the money figures are what the dashboard is for,

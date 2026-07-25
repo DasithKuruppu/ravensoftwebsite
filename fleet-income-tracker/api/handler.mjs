@@ -309,7 +309,12 @@ async function buildSummary(month, auth) {
 
   const dailyRate = workedDays > 0 ? revenue / workedDays : 0;
   const projectedRevenue = round2(revenue + dailyRate * remainingWorkDays);
+  // Distance for usage-based costs. GPS first: the tracker sees every kilometre
+  // the car moves, whereas Uber only counts the on-trip leg — and the car is
+  // charged for all of it. Uber's figure is a fallback for days with no GPS.
   const kmDriven = round2(entries.reduce((sum, e) => sum + (e.gpsKm || e.uberKm || 0), 0));
+  const kmFromGps = round2(entries.reduce((sum, e) => sum + (e.gpsKm || 0), 0));
+  const daysWithGps = entries.filter((e) => e.gpsKm).length;
 
   const current = calculatePay(revenue, settings, factor);
   const projected = calculatePay(projectedRevenue, settings, factor);
@@ -393,6 +398,9 @@ async function buildSummary(month, auth) {
     ...directCosts,
     perKm: kmDriven > 0 ? round2(directCosts.total / kmDriven) : null,
     kmDriven,
+    kmFromGps,
+    daysWithGps,
+    gpsCovers: entries.length > 0 ? Math.round((daysWithGps / entries.length) * 100) : 0,
     shareOfRevenue: revenue > 0 ? Math.round((directCosts.total / revenue) * 1000) / 10 : null,
   };
 
@@ -424,7 +432,21 @@ async function buildSummary(month, auth) {
 
     payload.ownerShare = share;
     payload.projectedOwnerShare = projShare;
-    payload.costs = costs;
+    payload.costs = {
+      ...costs,
+      kmDriven,
+      // Charging alone, per kilometre — the number that tells you whether the
+      // tariff being used is a good one.
+      chargingPerKm:
+        kmDriven > 0
+          ? round2(
+              costs.items
+                .filter((c) => c.category === 'charging')
+                .reduce((sum, c) => sum + c.monthly, 0) / kmDriven,
+            )
+          : null,
+      totalPerKm: kmDriven > 0 ? round2(costs.total / kmDriven) : null,
+    };
     // What is actually left after paying the driver and running the car.
     payload.ownerProfit = round2(share - costs.total);
     payload.projectedOwnerProfit = round2(projShare - costs.total);

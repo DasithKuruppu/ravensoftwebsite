@@ -50,6 +50,17 @@ export default function RunningCosts({ summary }) {
       )}
 
       <dl className="mt-3 pt-3 border-t border-ink-800 space-y-1.5">
+        {costs.chargingPerKm !== null && costs.chargingPerKm !== undefined && (
+          <Row
+            label="Charging per km"
+            hint={`over ${amount(costs.kmDriven)} km from the tracker`}
+            value={amount(costs.chargingPerKm)}
+            tone="text-warn"
+          />
+        )}
+        {costs.totalPerKm !== null && costs.totalPerKm !== undefined && (
+          <Row label="All costs per km" value={amount(costs.totalPerKm)} tone="text-slate-300" />
+        )}
         <Row label="Owner share" hint="revenue less driver pay" value={money(ownerShare)} />
         <Row label="Running costs" value={`− ${amount(costs.total)}`} tone="text-warn" />
         <div className="flex items-baseline justify-between gap-4 border-t border-ink-800 pt-2 mt-2">
