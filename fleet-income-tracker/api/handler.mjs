@@ -368,6 +368,10 @@ async function buildSummary(month, auth) {
     // extrapolates, so the two figures always agree with each other.
     // Per day actually worked, so time off does not read as a bad day.
     dailyAverage: round2(dailyRate),
+    // Today so far. Incomplete by definition — the car is still out — so it is
+    // shown as a running total rather than compared against a target the way
+    // yesterday is.
+    today: dayRevenue(entries, todayInColombo()),
     // Yesterday, not a rolling average and not today: today is still being
     // driven, so it always reads low and would misrepresent recent form.
     // Yesterday is the last complete day and the fairest recent comparison.
@@ -670,8 +674,19 @@ function yesterdayRevenue(entries) {
   const date = new Date(Date.parse(`${todayInColombo()}T00:00:00Z`) - 86400000)
     .toISOString()
     .slice(0, 10);
+  return dayRevenue(entries, date);
+}
+
+/** One day's figures, or null when nothing has been recorded for it yet. */
+function dayRevenue(entries, date) {
   const entry = entries.find((e) => e.date === date);
-  return entry ? { date, revenue: round2(entry.revenue || 0) } : null;
+  if (!entry) return null;
+  return {
+    date,
+    revenue: round2(entry.revenue || 0),
+    trips: entry.trips ?? null,
+    offDay: entry.offDay === true,
+  };
 }
 
 /**

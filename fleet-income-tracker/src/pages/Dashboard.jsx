@@ -58,9 +58,20 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
             title={`This month · ${monthLabel(month)}`}
             subtitle={`${count(summary.elapsedDays)} of ${count(summary.operatingDays)} operating days`}
           >
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <Stat label="Total revenue (LKR)" value={amount(summary.revenue)} accent />
             <Stat label="Daily average (LKR)" value={amount(summary.dailyAverage)} />
+            <Stat
+              label="Today (LKR)"
+              value={summary.today ? amount(summary.today.revenue) : '—'}
+              hint={
+                summary.today
+                  ? summary.today.offDay
+                    ? 'day off'
+                    : `${count(summary.today.trips ?? 0)} trips so far`
+                  : 'nothing imported yet'
+              }
+            />
             {summary.yesterday && (
               <Stat
                 label="Yesterday (LKR)"
@@ -209,7 +220,7 @@ function Section({ title, subtitle, children }) {
   );
 }
 
-function Stat({ label, value, accent = false, target, current }) {
+function Stat({ label, value, accent = false, target, current, hint }) {
   // A recent average is only meaningful against the pace being chased.
   const gap = typeof target === 'number' && typeof current === 'number' ? current - target : null;
   const showTrend = gap !== null && Math.abs(gap) >= 1;
@@ -228,6 +239,7 @@ function Stat({ label, value, accent = false, target, current }) {
           {gap >= 0 ? '▲ on pace' : `▼ ${amount(Math.abs(gap))} below pace`}
         </div>
       )}
+      {!showTrend && hint && <div className="text-[11px] text-slate-600 mt-0.5">{hint}</div>}
     </div>
   );
 }
