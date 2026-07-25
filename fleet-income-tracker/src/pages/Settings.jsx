@@ -132,9 +132,58 @@ export default function Settings() {
           </p>
         </div>
 
+        <div className="border-t border-ink-800 pt-4">
+          <h3 className="label mb-3">Vehicle capital</h3>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <div className="grid gap-1">
+              <label className="label" htmlFor="capitalInvested">
+                What the vehicle cost (LKR)
+              </label>
+              <input
+                id="capitalInvested"
+                type="number"
+                step="10000"
+                className="num"
+                value={form.capitalInvested ?? ''}
+                onChange={(e) => setForm({ ...form, capitalInvested: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-1">
+              <label className="label" htmlFor="leasedPercent">
+                Share financed by lease (%)
+              </label>
+              <input
+                id="leasedPercent"
+                type="number"
+                step="5"
+                className="num"
+                value={form.leasedPercent ?? ''}
+                onChange={(e) => setForm({ ...form, leasedPercent: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-1">
+              <label className="label" htmlFor="alternativeRatePct">
+                Fixed deposit rate to compare (%)
+              </label>
+              <input
+                id="alternativeRatePct"
+                type="number"
+                step="0.5"
+                className="num"
+                value={form.alternativeRatePct ?? ''}
+                onChange={(e) => setForm({ ...form, alternativeRatePct: e.target.value })}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Used to compare what the car returns against leaving the money on deposit. Interest is
+            charged only on your own share, not the leased part.
+          </p>
+        </div>
+
         <div className="flex items-center gap-3">
           <button type="submit" className="btn btn-primary" disabled={busy}>
-            {busy ? 'Saving…' : 'Save plan'}
+            {busy ? 'Saving…' : 'Save plan & capital'}
           </button>
           {saved && (
             <button type="button" className="btn" onClick={() => setForm(saved)} disabled={busy}>
@@ -173,56 +222,6 @@ export default function Settings() {
             </div>
           ))}
         </dl>
-      </div>
-
-      {/* Capital, for the return-on-capital comparison. */}
-      <div className="card">
-        <h2 className="label mb-3">Vehicle capital</h2>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div className="grid gap-1">
-            <label className="label" htmlFor="capitalInvested">
-              What the vehicle cost (LKR)
-            </label>
-            <input
-              id="capitalInvested"
-              type="number"
-              step="10000"
-              className="num"
-              value={form.capitalInvested ?? ''}
-              onChange={(e) => setForm({ ...form, capitalInvested: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-1">
-            <label className="label" htmlFor="leasedPercent">
-              Share financed by lease (%)
-            </label>
-            <input
-              id="leasedPercent"
-              type="number"
-              step="5"
-              className="num"
-              value={form.leasedPercent ?? ''}
-              onChange={(e) => setForm({ ...form, leasedPercent: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-1">
-            <label className="label" htmlFor="alternativeRatePct">
-              Fixed deposit rate to compare against (%)
-            </label>
-            <input
-              id="alternativeRatePct"
-              type="number"
-              step="0.5"
-              className="num"
-              value={form.alternativeRatePct ?? ''}
-              onChange={(e) => setForm({ ...form, alternativeRatePct: e.target.value })}
-            />
-          </div>
-        </div>
-        <p className="text-xs text-slate-500 mt-2">
-          Used to compare what the car returns against leaving the money on deposit. Saved with the
-          plan above.
-        </p>
       </div>
 
       <CostEditor />

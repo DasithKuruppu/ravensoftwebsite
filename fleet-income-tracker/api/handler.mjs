@@ -302,6 +302,7 @@ async function buildSummary(month, auth) {
 
   const dailyRate = workedDays > 0 ? revenue / workedDays : 0;
   const projectedRevenue = round2(revenue + dailyRate * remainingWorkDays);
+  const kmDriven = round2(entries.reduce((sum, e) => sum + (e.gpsKm || e.uberKm || 0), 0));
 
   const current = calculatePay(revenue, settings, factor);
   const projected = calculatePay(projectedRevenue, settings, factor);
@@ -374,6 +375,18 @@ async function buildSummary(month, auth) {
     plan: { bandStart: effectivePlan.bandStart, bandEnd: effectivePlan.bandEnd, base: effectivePlan.base },
   };
 
+  // Next month at the current rate. Worth its own figure because this month is
+  // partial — the plan is prorated and the revenue covers only part of it — so
+  // it says nothing about what a steady month looks like. Next month runs on
+  // full bands, which is the real test of whether the arrangement works.
+  payload.nextMonth = buildNextMonth({
+    month,
+    settings,
+    dailyRate,
+    kmDriven,
+    workedDays,
+  });
+
   // Owner-share figures and the cost ledger are withheld from driver tokens at
   // the API level — they are absent from his payload, not hidden in his UI.
   if (isOwner(auth)) {
@@ -383,9 +396,6 @@ async function buildSummary(month, auth) {
     // month: days driven excludes days off, and distance prefers the GPS
     // reading over Uber's, since charging pays for every kilometre rather than
     // only the on-trip ones.
-    const kmDriven = round2(
-      entries.reduce((sum, e) => sum + (e.gpsKm || e.uberKm || 0), 0),
-    );
     const costs = costsForMonth(await store.getCosts(), month, {
       daysDriven: workedDays,
       kmDriven,
@@ -398,6 +408,17 @@ async function buildSummary(month, auth) {
     payload.ownerProfit = round2(share - costs.total);
     payload.projectedOwnerProfit = round2(projShare - costs.total);
     payload.roi = buildRoi({ settings, projectedProfit: round2(projShare - costs.total) });
+    // Owner-only half of next month: what it costs and what it leaves.
+    if (payload.nextMonth) {
+      const nm = payload.nextMonth;
+      const nmCosts = costsForMonth(await store.getCosts(), nm.month, {
+        daysDriven: nm.days,
+        kmDriven: nm.kmDriven,
+      });
+      nm.costs = nmCosts;
+      nm.ownerShare = ownerShare(nm.revenue, settings, 1);
+      nm.ownerProfit = round2(nm.ownerShare - nmCosts.total);
+    }
   }
 
   return payload;
@@ -809,6 +830,42 @@ function haversineKm(aLat, aLng, bLat, bLng) {
   const s =
     Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+/**
+ * Next month at the current daily rate.
+ *
+ * Always a full month: by then the start date is in the past, so the plan runs
+ * at its normal levels rather than prorated. That is the number worth watching
+ * — the first month is short, prorated and unrepresentative, and judging the
+ * arrangement on it would be judging it on its worst case.
+ *
+ * Assumes every day is driven. Days off are not knowable in advance, so this is
+ * a ceiling on the run rate rather than a promise.
+ */
+function buildNextMonth({ month, settings, dailyRate, kmDriven, workedDays }) {
+  const [y, m] = month.split('-').map(Number);
+  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  const days = daysInMonthOf(next);
+
+  const revenue = round2(dailyRate * days);
+  const pay = calculatePay(revenue, settings, 1);
+  const plan = prorate(settings, 1);
+  const kmPerDay = workedDays > 0 ? kmDriven / workedDays : 0;
+
+  return {
+    month: next,
+    days,
+    dailyRate: round2(dailyRate),
+    revenue,
+    kmDriven: round2(kmPerDay * days),
+    driverPay: pay.total,
+    tiers: pay.tiers,
+    plan: { base: plan.base, bandStart: plan.bandStart, bandEnd: plan.bandEnd },
+    // Where a full month lands against the real bands.
+    reachesBand: revenue >= plan.bandStart,
+    reachesTop: revenue >= plan.bandEnd,
+  };
 }
 
 /**

@@ -9,6 +9,7 @@ import ProjectionChart from '../components/ProjectionChart.jsx';
 import PushToTier from '../components/PushToTier.jsx';
 import RunningCosts from '../components/RunningCosts.jsx';
 import ReturnOnCapital from '../components/ReturnOnCapital.jsx';
+import NextMonth from '../components/NextMonth.jsx';
 
 export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
   const [summary, setSummary] = useState(null);
@@ -94,10 +95,14 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
           <ProjectionChart summary={summary} />
 
           {/* Owner-only; the API omits these fields for a driver token. */}
+          <div className="grid md:grid-cols-2 gap-5">
+            <NextMonth summary={summary} isOwner={isOwner} />
+            {isOwner && summary.costs && <ReturnOnCapital summary={summary} />}
+          </div>
+
           {isOwner && summary.costs && (
             <div className="grid md:grid-cols-2 gap-5">
               <RunningCosts summary={summary} />
-              <ReturnOnCapital summary={summary} />
             </div>
           )}
 
