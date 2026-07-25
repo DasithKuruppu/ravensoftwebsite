@@ -97,12 +97,11 @@ export const DEFAULT_CHARGERS = [
     connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'approx', source: 'johnkeellscgauto.com',
   },
-  {
-    id: 'keells-rajagiriya', name: 'Keells · Rajagiriya', address: 'Rajagiriya',
-    lat: 6.90687, lng: 79.9023, network: 'Keells / JKCG', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
-    ccs2: 'confirmed', position: 'exact', source: 'johnkeellscgauto.com',
-  },
+  // Keells Rajagiriya removed 2026-07-25: reported gone by the owner, who was
+  // 30 m from it. John Keells CG Auto's locator still lists it, which is the
+  // useful lesson — "CCS2 confirmed · johnkeellscgauto.com" means the operator
+  // publishes it, not that it is standing today. Removed from the seed rather
+  // than only from the saved list, so "Reset to seed list" cannot bring it back.
   {
     id: 'keells-kohuwala', name: 'Keells · Kohuwala', address: 'Sunethradevi Rd, Kohuwala',
     lat: 6.86958, lng: 79.88074, network: 'Keells / JKCG', app: 'VOLT Charge',
