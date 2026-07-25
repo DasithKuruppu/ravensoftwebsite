@@ -27,6 +27,8 @@ const SETTINGS_SK = 'SETTINGS';
 // partition rather than under DRIVER#<id>.
 const CONFIG_PK = 'CONFIG';
 const CHARGERS_SK = 'CHARGERS';
+// Previous GPS fix, kept so speed can be derived across Lambda cold starts.
+const LASTFIX_SK = 'LASTFIX';
 
 /* ────────────────────────────── DynamoDB ────────────────────────────── */
 
@@ -136,6 +138,24 @@ const ddbImpl = {
     );
     return list;
   },
+
+  async getLastFix() {
+    const { GetCommand } = await import('@aws-sdk/lib-dynamodb');
+    const client = await ddb();
+    const res = await client.send(
+      new GetCommand({ TableName: TABLE, Key: { pk: CONFIG_PK, sk: LASTFIX_SK } }),
+    );
+    return res.Item?.fix || null;
+  },
+
+  async putLastFix(fix) {
+    const { PutCommand } = await import('@aws-sdk/lib-dynamodb');
+    const client = await ddb();
+    await client.send(
+      new PutCommand({ TableName: TABLE, Item: { pk: CONFIG_PK, sk: LASTFIX_SK, fix } }),
+    );
+    return fix;
+  },
 };
 
 /* ─────────────────────── Local JSON-file fallback ─────────────────────── */
@@ -214,6 +234,17 @@ const memImpl = {
     db[CONFIG_PK][CHARGERS_SK] = { list, updatedAt: new Date().toISOString() };
     writeAll(db);
     return list;
+  },
+  async getLastFix() {
+    const db = readAll();
+    return (db[CONFIG_PK] || {})[LASTFIX_SK]?.fix || null;
+  },
+  async putLastFix(fix) {
+    const db = readAll();
+    db[CONFIG_PK] = db[CONFIG_PK] || {};
+    db[CONFIG_PK][LASTFIX_SK] = { fix };
+    writeAll(db);
+    return fix;
   },
 };
 

@@ -202,9 +202,14 @@ export async function fetchLocation(session) {
   return {
     lat,
     lng,
-    speedKmh: Number(d.sudu) || 0,
+    // The portal's own speed field. On this GT06 it reads 0 even while the car
+    // is plainly moving (verified 2026-07-25: 580 m covered across two minutes
+    // of fixes, sudu 0 throughout), so it is reported but never trusted — the
+    // API derives speed from consecutive fixes instead.
+    deviceSpeedKmh: Number(d.sudu) || 0,
     fixedAt: toIso(d.datetime),
     heartbeatAt: toIso(d.heart_time),
+    serverTime: toIso(d.sys_time),
     plate: d.user_name || null,
     deviceId: d.sim_id || null,
   };

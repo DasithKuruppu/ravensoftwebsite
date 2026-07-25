@@ -80,7 +80,7 @@ export default function VehicleMap() {
     L.marker([loc.lat, loc.lng], { icon: pin('#4ade80', '🚗'), zIndexOffset: 1000 })
       .bindPopup(
         `<b>${escapeHtml(loc.plate || 'Vehicle')}</b>` +
-          `<br>${loc.speedKmh > 3 ? `${loc.speedKmh} km/h` : 'stationary'}` +
+          `<br>${escapeHtml(statusText(loc))}` +
           `<br>${mapsLink(placeUrl(loc.lat, loc.lng), 'View on Google Maps')}`,
       )
       .addTo(layerRef.current);
@@ -143,12 +143,11 @@ export default function VehicleMap() {
         <h2 className="label">
           Vehicle &amp; charging{loc.plate ? ` · ${loc.plate}` : ''}
         </h2>
-        <span className="text-xs text-slate-500">
-          <span className={loc.speedKmh > 3 ? 'text-accent' : 'text-slate-400'}>
-            {loc.speedKmh > 3 ? `moving · ${loc.speedKmh} km/h` : 'stationary'}
+        <span className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+          <Status loc={loc} />
+          <span>
+            fix <Ago iso={loc.fixedAt} />
           </span>
-          {' · '}
-          <Ago iso={loc.fixedAt} />
         </span>
       </div>
 
@@ -350,6 +349,55 @@ function mapsLink(href, label) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/**
+ * Movement status.
+ *
+ * The tracker's own speed field reads 0 permanently on this device, so the API
+ * derives speed from how far the vehicle moved between fixes. When it has only
+ * one fix to go on it says "position only" rather than claiming "stationary" —
+ * which is what the old code did, and why the car always looked parked.
+ */
+function Status({ loc }) {
+  const { status, speedKmh, movedM } = loc;
+
+  if (status === 'offline') {
+    return <Chip tone="warn">offline</Chip>;
+  }
+  if (status === 'moving') {
+    return (
+      <Chip tone="accent">
+        moving{speedKmh != null ? ` · ${speedKmh} km/h` : movedM != null ? ` · ${movedM} m` : ''}
+      </Chip>
+    );
+  }
+  if (status === 'parked') return <Chip tone="slate">parked</Chip>;
+  return (
+    <Chip tone="slate" title="Only one fix so far — movement is known once a second fix arrives">
+      position only
+    </Chip>
+  );
+}
+
+function statusText(loc) {
+  if (loc.status === 'offline') return 'offline';
+  if (loc.status === 'moving') return loc.speedKmh != null ? `moving · ${loc.speedKmh} km/h` : 'moving';
+  if (loc.status === 'parked') return 'parked';
+  return 'position only';
+}
+
+function Chip({ tone, children, title }) {
+  const tones = {
+    accent: 'text-accent border-accent/40 bg-accent/10',
+    warn: 'text-warn border-warn/40 bg-warn/10',
+    slate: 'text-slate-400 border-ink-700 bg-ink-800/60',
+  };
+  return (
+    <span className={`text-[11px] px-1.5 py-0.5 rounded border ${tones[tone]}`} title={title}>
+      {children}
+    </span>
+  );
 }
 
 function Ago({ iso }) {

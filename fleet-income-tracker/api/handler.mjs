@@ -393,18 +393,100 @@ export async function importRows(rows) {
  * slightly slower page — and the fix's own timestamp is always returned so the
  * UI can say how old it is.
  */
-const LOCATION_TTL_MS = 60_000;
+// The tracker reports roughly every 20s while moving, so caching for a minute
+// would hide movement between refreshes. 15s still absorbs a burst of reloads.
+const LOCATION_TTL_MS = 15_000;
+
+/** Portal's own definition: no heartbeat for this long means offline. */
+const OFFLINE_AFTER_MIN = 25;
+
+/** Two fixes further apart than this say nothing useful about current speed. */
+const MAX_DERIVE_GAP_S = 300;
+
+/** Below this, GPS jitter rather than movement. */
+const MOVED_THRESHOLD_M = 25;
+
 let locationCache = null;
 
 async function vehicleLocation() {
   if (locationCache && Date.now() - locationCache.at < LOCATION_TTL_MS) {
     return { ...locationCache.value, cached: true };
   }
+
   const session = await dagpsLogin(await dagpsCredentials());
-  const loc = await fetchLocation(session);
-  const value = { available: true, ...loc };
+  const fix = await fetchLocation(session);
+
+  // The device's own speed field is stuck at 0 on this hardware, so derive
+  // speed from how far the vehicle moved between this fix and the last one.
+  const previous = await store.getLastFix();
+  const derived = deriveMotion(previous, fix);
+
+  // Only advance the stored fix when the device actually produced a new one;
+  // otherwise a page reload would compare a fix against itself and read as
+  // stationary.
+  if (!previous || previous.fixedAt !== fix.fixedAt) {
+    await store.putLastFix({ lat: fix.lat, lng: fix.lng, fixedAt: fix.fixedAt });
+  }
+
+  const value = { available: true, ...fix, ...derived };
   locationCache = { at: Date.now(), value };
   return { ...value, cached: false };
+}
+
+/**
+ * Work out whether the vehicle is moving, and how fast, from two fixes.
+ *
+ * Returns speedKmh: null when it cannot be known — a long gap between fixes
+ * gives an average over that whole window, which would be misleading rather
+ * than merely imprecise.
+ */
+export function deriveMotion(previous, fix) {
+  const heartbeatAgeMin = ageMinutes(fix.serverTime, fix.heartbeatAt);
+  if (heartbeatAgeMin !== null && heartbeatAgeMin > OFFLINE_AFTER_MIN) {
+    return { status: 'offline', speedKmh: null, speedSource: 'none', movedM: null };
+  }
+
+  if (!previous || !previous.fixedAt || previous.fixedAt === fix.fixedAt) {
+    // No usable comparison yet — say so rather than claiming "stationary".
+    return { status: 'unknown', speedKmh: null, speedSource: 'none', movedM: null };
+  }
+
+  const gapS = (Date.parse(fix.fixedAt) - Date.parse(previous.fixedAt)) / 1000;
+  const movedM = Math.round(haversineKm(previous.lat, previous.lng, fix.lat, fix.lng) * 1000);
+
+  if (gapS <= 0 || gapS > MAX_DERIVE_GAP_S) {
+    return {
+      status: movedM > MOVED_THRESHOLD_M ? 'unknown' : 'parked',
+      speedKmh: null,
+      speedSource: 'none',
+      movedM,
+    };
+  }
+
+  const kmh = Math.round((movedM / 1000 / (gapS / 3600)) * 10) / 10;
+  return {
+    status: movedM > MOVED_THRESHOLD_M ? 'moving' : 'parked',
+    speedKmh: movedM > MOVED_THRESHOLD_M ? kmh : 0,
+    speedSource: 'derived',
+    movedM,
+    overSeconds: Math.round(gapS),
+  };
+}
+
+function ageMinutes(nowIso, thenIso) {
+  if (!nowIso || !thenIso) return null;
+  const ms = Date.parse(nowIso) - Date.parse(thenIso);
+  return Number.isFinite(ms) ? ms / 60000 : null;
+}
+
+function haversineKm(aLat, aLng, bLat, bLng) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const s =
+    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
 }
 
 /**
