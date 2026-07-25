@@ -266,6 +266,7 @@ async function buildSummary(month, auth) {
     operatingTotal,
     revenue,
     projectedRevenue,
+    yesterday: yesterdayRevenue(entries),
   });
 
   const payload = {
@@ -600,6 +601,7 @@ function buildPush({
  */
 function buildSeries({
   entries, settings, factor, daysInMonth, elapsedDays, operatingTotal, revenue, projectedRevenue,
+  yesterday,
 }) {
   if (!operatingTotal) return { actual: [], scenarios: [] };
 
@@ -637,8 +639,22 @@ function buildSeries({
     { key: 'current', label: 'current pace', endRevenue: round2(projectedRevenue), points: daysLeft > 0 ? tail(projectedRevenue) : [] },
   ];
 
+  // Yesterday repeated to month end. The month average is dragged down by slow
+  // days and by today, which is still being driven; yesterday is a complete
+  // day and shows what the month looks like if that effort holds.
+  if (yesterday && yesterday.revenue > 0 && daysLeft > 0) {
+    const endRevenue = today.revenue + yesterday.revenue * daysLeft;
+    scenarios.push({
+      key: 'yesterday',
+      label: "yesterday's pace",
+      endRevenue: round2(endRevenue),
+      points: tail(endRevenue),
+    });
+  }
+
   // The stretch: the next threshold that actually pays more than today's pace.
-  const stretch = projectedRevenue < plan.bandEnd ? plan.bandEnd : null;
+  const bestPace = Math.max(projectedRevenue, ...scenarios.map((sc) => sc.endRevenue));
+  const stretch = bestPace < plan.bandEnd ? plan.bandEnd : null;
   if (stretch !== null && daysLeft > 0) {
     scenarios.push({ key: 'stretch', label: 'if you reach tier 3', endRevenue: round2(stretch), points: tail(stretch) });
   }

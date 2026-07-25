@@ -19,6 +19,9 @@ import { amount, money } from '../format.js';
  */
 const ACTUAL = '#199e70';
 const STRETCH = '#3987e5';
+const YESTERDAY = '#d95926';
+
+const COLOUR = { current: ACTUAL, yesterday: YESTERDAY, stretch: STRETCH };
 
 const PAD = { top: 22, right: 16, bottom: 26, left: 62 };
 const HEIGHT = 230;
@@ -35,6 +38,7 @@ export default function ProjectionChart({ summary }) {
 
   const current = scenarios.find((s) => s.key === 'current');
   const stretch = scenarios.find((s) => s.key === 'stretch');
+  const drawable = scenarios.filter((s) => s.points.length > 1);
 
   const innerW = Math.max(120, width - PAD.left - PAD.right);
   const innerH = HEIGHT - PAD.top - PAD.bottom;
@@ -51,6 +55,7 @@ export default function ProjectionChart({ summary }) {
   const path = (pts) => pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.day)},${y(p.pay)}`).join(' ');
   const today = actual[actual.length - 1];
   const ticks = niceTicks(minY, maxY, 3);
+  const best = drawable.reduce((b, sc) => (!b || sc.endPay > b.endPay ? sc : b), null);
 
   // Roughly 22px per label before they touch at this font size.
   const totalDays = lastDay - firstDay + 1;
@@ -72,7 +77,11 @@ export default function ProjectionChart({ summary }) {
         <h2 className="label">{driverName || 'Driver'} take-home this month</h2>
         <span className="flex items-center gap-3 text-xs text-slate-400">
           <Key colour={ACTUAL} label="so far / current pace" />
-          {stretch && <Key colour={STRETCH} label={stretch.label} dashed />}
+          {drawable
+            .filter((sc) => sc.key !== 'current')
+            .map((sc) => (
+              <Key key={sc.key} colour={COLOUR[sc.key]} label={sc.label} dashed />
+            ))}
         </span>
       </div>
       <p className="text-xs text-slate-500 mb-2">
@@ -103,13 +112,20 @@ export default function ProjectionChart({ summary }) {
             </g>
           ))}
 
-          {/* the stretch finish, drawn under the current one */}
-          {stretch && stretch.points.length > 1 && (
-            <path d={path(stretch.points)} fill="none" stroke={STRETCH} strokeWidth="2" strokeDasharray="5 4" strokeLinecap="round" />
-          )}
-          {current && current.points.length > 1 && (
-            <path d={path(current.points)} fill="none" stroke={ACTUAL} strokeWidth="2" strokeDasharray="5 4" strokeLinecap="round" opacity="0.9" />
-          )}
+          {/* Each finish gets its own dash pattern as well as its own hue, so
+              the lines stay tellable apart without relying on colour. */}
+          {drawable.map((sc) => (
+            <path
+              key={sc.key}
+              d={path(sc.points)}
+              fill="none"
+              stroke={COLOUR[sc.key]}
+              strokeWidth="2"
+              strokeDasharray={sc.key === 'current' ? '5 4' : sc.key === 'yesterday' ? '2 3' : '8 4'}
+              strokeLinecap="round"
+              opacity="0.95"
+            />
+          ))}
 
           {/* actual */}
           <path d={path(actual)} fill="none" stroke={ACTUAL} strokeWidth="2.5" strokeLinecap="round" />
@@ -119,12 +135,9 @@ export default function ProjectionChart({ summary }) {
           <circle cx={x(today.day)} cy={y(today.pay)} r="4.5" fill={ACTUAL} stroke="#141821" strokeWidth="2" />
 
           {/* end points, labelled directly — the two numbers that matter */}
-          {stretch && stretch.points.length > 1 && (
-            <EndLabel x={x(lastDay)} y={y(stretch.endPay)} colour={STRETCH} value={stretch.endPay} width={width} />
-          )}
-          {current && current.points.length > 1 && (
-            <EndLabel x={x(lastDay)} y={y(current.endPay)} colour={ACTUAL} value={current.endPay} width={width} />
-          )}
+          {drawable.map((sc) => (
+            <EndLabel key={sc.key} x={x(lastDay)} y={y(sc.endPay)} colour={COLOUR[sc.key]} value={sc.endPay} width={width} />
+          ))}
 
           {/* Every day is labelled, thinning to every 2nd or 3rd only when the
               axis is too narrow to fit them without colliding. Today is always
@@ -156,17 +169,19 @@ export default function ProjectionChart({ summary }) {
             <span className="text-slate-400">
               Day <span className="num text-slate-200">{hover}</span>
             </span>
-            {current && <Val colour={ACTUAL} label="current pace" value={at(current.points, hover)} />}
-            {stretch && <Val colour={STRETCH} label="tier 3" value={at(stretch.points, hover)} />}
+            {drawable.map((sc) => (
+              <Val key={sc.key} colour={COLOUR[sc.key]} label={sc.label} value={at(sc.points, hover)} />
+            ))}
           </div>
         ) : (
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <span className="text-slate-500">Month end:</span>
-            {current && <Val colour={ACTUAL} label="current pace" sc={current} />}
-            {stretch && <Val colour={STRETCH} label={stretch.label} sc={stretch} />}
-            {stretch && current && stretch.endPay > current.endPay && (
+            {drawable.map((sc) => (
+              <Val key={sc.key} colour={COLOUR[sc.key]} label={sc.label} sc={sc} />
+            ))}
+            {best && current && best.endPay > current.endPay && (
               <span className="text-accent">
-                {money(stretch.endPay - current.endPay)} more for pushing
+                {money(best.endPay - current.endPay)} more at {best.label}
               </span>
             )}
           </div>
