@@ -5,6 +5,7 @@ import MonthNav from '../components/MonthNav.jsx';
 import TierLadder from '../components/TierLadder.jsx';
 import VehicleMap from '../components/VehicleMap.jsx';
 import CashSplit from '../components/CashSplit.jsx';
+import ProjectionChart from '../components/ProjectionChart.jsx';
 
 export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
   const [summary, setSummary] = useState(null);
@@ -48,8 +49,9 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
               </span>
             </div>
           )}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <Stat label="Total revenue (LKR)" value={amount(summary.revenue)} accent />
+            <Stat label="Daily average (LKR)" value={amount(summary.dailyAverage)} />
             <Stat label="Trips" value={count(summary.trips)} />
             <Stat
               label="Days logged"
@@ -68,6 +70,8 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
             bandStart={summary.plan.bandStart}
             bandEnd={summary.plan.bandEnd}
           />
+
+          <ProjectionChart summary={summary} />
 
           <div className="grid md:grid-cols-2 gap-5">
             <CashSplit summary={summary} />

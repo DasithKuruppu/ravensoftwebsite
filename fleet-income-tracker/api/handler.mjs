@@ -254,9 +254,23 @@ async function buildSummary(month, auth) {
   const projected = calculatePay(projectedRevenue, settings, factor);
   const effectivePlan = prorate(settings, factor);
 
+  // Cumulative day-by-day series for the projection chart. Built here rather
+  // than in the browser because the pay curve needs the full tier settings,
+  // which the driver is not allowed to read.
+  const series = buildSeries({
+    entries,
+    settings,
+    factor,
+    daysInMonth,
+    elapsedDays,
+    operatingTotal,
+    revenue,
+  });
+
   const payload = {
     month,
     revenue,
+    series,
     trips,
     daysLogged,
     daysInMonth,
@@ -266,6 +280,9 @@ async function buildSummary(month, auth) {
     prorationFactor: Math.round(factor * 10000) / 10000,
     startDate: settings.startDate ?? null,
     driverName: settings.driverName || 'Driver',
+    // Average per operating day elapsed — the same run-rate the projection
+    // extrapolates, so the two figures always agree with each other.
+    dailyAverage: elapsedDays > 0 ? round2(revenue / elapsedDays) : 0,
     driverPay: current.total,
     tiers: current.tiers,
     // Both roles see this: the driver needs to know how much cash he is holding.
@@ -462,6 +479,38 @@ async function vehicleLocation() {
   const value = { available: true, ...fix, ...derived };
   locationCache = { at: Date.now(), value };
   return { ...value, cached: false };
+}
+
+/**
+ * Cumulative revenue and pay for each operating day of the month.
+ *
+ * Days up to today are actual; the rest extend the current daily run-rate to
+ * month end. Pay is recomputed at each cumulative revenue rather than scaled,
+ * because the plan is piecewise — it is flat at the base until revenue reaches
+ * the band, then rises at one rate, then a steeper one. That shape is the point
+ * of drawing it.
+ */
+function buildSeries({ entries, settings, factor, daysInMonth, elapsedDays, operatingTotal, revenue }) {
+  if (!operatingTotal) return [];
+
+  const firstDay = daysInMonth - operatingTotal + 1;
+  const byDay = new Map(entries.map((e) => [Number(e.date.slice(8, 10)), e.revenue || 0]));
+  const perDay = elapsedDays > 0 ? revenue / elapsedDays : 0;
+
+  const out = [];
+  let cumulative = 0;
+  for (let day = firstDay; day <= daysInMonth; day++) {
+    const elapsedSoFar = day - firstDay + 1;
+    const isProjected = elapsedSoFar > elapsedDays;
+    cumulative = isProjected ? cumulative + perDay : cumulative + (byDay.get(day) || 0);
+    out.push({
+      day,
+      revenue: round2(cumulative),
+      pay: calculatePay(cumulative, settings, factor).total,
+      projected: isProjected,
+    });
+  }
+  return out;
 }
 
 /**
