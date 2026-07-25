@@ -7,10 +7,10 @@ const lkr = new Intl.NumberFormat('en-LK', {
 
 const plain = new Intl.NumberFormat('en-LK', { maximumFractionDigits: 0 });
 
-/** "LKR 121,394.60" */
+/** "LKR 121,394.60" — non-breaking space so the unit never wraps off its number. */
 export function money(n) {
-  if (n === null || n === undefined || Number.isNaN(n)) return 'LKR —';
-  return `LKR ${lkr.format(n)}`;
+  if (n === null || n === undefined || Number.isNaN(n)) return 'LKR\u00a0—';
+  return `LKR\u00a0${lkr.format(n)}`;
 }
 
 /** "121,394.60" — for table cells where the LKR prefix would be noise. */

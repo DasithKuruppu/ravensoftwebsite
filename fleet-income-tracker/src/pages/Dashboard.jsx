@@ -47,13 +47,13 @@ export default function Dashboard({ month, setMonth, isOwner }) {
             </div>
           )}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Stat label="Revenue MTD" value={money(summary.revenue)} accent />
+            <Stat label="Revenue MTD (LKR)" value={amount(summary.revenue)} accent />
             <Stat label="Trips" value={count(summary.trips)} />
             <Stat
               label="Days logged"
               value={`${count(summary.daysLogged)} / ${count(summary.operatingDays)}`}
             />
-            <Stat label="Driver take-home" value={money(summary.driverPay)} accent />
+            <Stat label="Take-home (LKR)" value={amount(summary.driverPay)} accent />
           </div>
 
           <TierLadder
@@ -126,7 +126,11 @@ function Stat({ label, value, accent = false }) {
   return (
     <div className="card">
       <div className="label">{label}</div>
-      <div className={`num mt-1.5 text-xl ${accent ? 'text-accent' : 'text-slate-100'}`}>
+      <div
+        className={`num mt-1.5 text-base sm:text-xl whitespace-nowrap ${
+          accent ? 'text-accent' : 'text-slate-100'
+        }`}
+      >
         {value}
       </div>
     </div>
