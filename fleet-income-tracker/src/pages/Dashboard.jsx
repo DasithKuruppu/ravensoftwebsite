@@ -119,7 +119,11 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
               its natural height instead of stretching to match its neighbour. */}
           <div className="grid md:grid-cols-2 gap-5 items-start">
             <div className="card">
-              <h2 className="label mb-3">{summary.driverName} pay at current revenue</h2>
+              <h2 className="label">{summary.driverName} pay on revenue so far</h2>
+              <p className="text-xs text-slate-500 mb-3 mt-1">
+                {monthLabel(month)} to date · <span className="num">{amount(summary.revenue)}</span>{' '}
+                earned
+              </p>
               <dl className="space-y-2">
                 {summary.tiers.map((t) => (
                   <div key={t.key} className="flex items-baseline justify-between gap-4">
@@ -141,10 +145,11 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
             </div>
 
             <div className="card">
-              <h2 className="label mb-3">Projected month end</h2>
-              <p className="text-xs text-slate-500 mb-3">
-                {monthLabel(month)} · {count(summary.elapsedDays)} of{' '}
-                {count(summary.operatingDays)} operating days elapsed
+              <h2 className="label">Projected month end</h2>
+              <p className="text-xs text-slate-500 mb-3 mt-1">
+                at average pace · <span className="num">{amount(summary.dailyAverage)}</span>/day ·{' '}
+                {count(summary.elapsedDays)} of {count(summary.operatingDays)} operating days
+                elapsed
               </p>
               <dl className="space-y-2">
                 <Row label="Projected revenue" value={money(summary.projectedRevenue)} />
@@ -182,7 +187,7 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
 
           <Section
             title={`Next month · ${monthLabel(`${summary.nextMonth?.month || month}-01`)}`}
-            subtitle="at the current daily rate, on full commission bands"
+            subtitle="at average pace, on full commission bands"
           >
             <div className="grid md:grid-cols-2 gap-5 items-start">
               <NextMonth summary={summary} isOwner={isOwner} />

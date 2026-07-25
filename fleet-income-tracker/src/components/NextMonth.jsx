@@ -1,7 +1,7 @@
 import { money, amount, monthLabel } from '../format.js';
 
 /**
- * Next month at the current daily rate.
+ * Next month at the average daily pace.
  *
  * The first month is short, prorated and unrepresentative — judging the
  * arrangement on it means judging it on its worst case. Next month runs on full
