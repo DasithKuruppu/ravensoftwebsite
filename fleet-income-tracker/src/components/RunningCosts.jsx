@@ -39,6 +39,7 @@ export default function RunningCosts({ summary }) {
                   {categoryLabel(c.category)}
                   {c.frequency === 'annual' && ' · yearly ÷ 12'}
                   {c.frequency === 'once' && ' · one-off'}
+                  {c.basis && ` · ${amount(c.amount)} × ${c.basis}`}
                   {c.remaining !== null && c.remaining !== undefined && ` · ${c.remaining} left`}
                 </span>
               </dt>

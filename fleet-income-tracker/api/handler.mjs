@@ -379,7 +379,17 @@ async function buildSummary(month, auth) {
   if (isOwner(auth)) {
     const share = ownerShare(revenue, settings, factor);
     const projShare = ownerShare(projectedRevenue, settings, factor);
-    const costs = costsForMonth(await store.getCosts(), month);
+    // Usage-based costs are measured against what the car actually did this
+    // month: days driven excludes days off, and distance prefers the GPS
+    // reading over Uber's, since charging pays for every kilometre rather than
+    // only the on-trip ones.
+    const kmDriven = round2(
+      entries.reduce((sum, e) => sum + (e.gpsKm || e.uberKm || 0), 0),
+    );
+    const costs = costsForMonth(await store.getCosts(), month, {
+      daysDriven: workedDays,
+      kmDriven,
+    });
 
     payload.ownerShare = share;
     payload.projectedOwnerShare = projShare;

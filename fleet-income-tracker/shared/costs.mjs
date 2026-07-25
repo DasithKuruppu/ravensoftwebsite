@@ -9,7 +9,11 @@
  * Costs arrive on three different rhythms, and mixing them would make any
  * monthly total meaningless:
  *
- *   once     a single event on a date — a service, one charging session
+ *   once     a single event on a date — a service, a tyre change
+ *   daily    scales with days actually driven — a flat monthly charging figure
+ *            is wrong for a month with five working days and one with twenty
+ *   perKm    scales with distance — the honest shape for an EV's electricity,
+ *            since charging tracks kilometres rather than calendar days
  *   monthly  a recurring monthly charge — a data package, or a lease
  *            instalment, which may carry a term after which it stops
  *   annual   billed yearly — insurance, revenue licence. Spread across twelve
@@ -32,6 +36,8 @@ export const COST_CATEGORIES = [
 
 export const COST_FREQUENCIES = [
   { key: 'once', label: 'One-off' },
+  { key: 'daily', label: 'Per day driven' },
+  { key: 'perKm', label: 'Per km driven' },
   { key: 'monthly', label: 'Every month' },
   { key: 'annual', label: 'Every year' },
 ];
@@ -39,7 +45,7 @@ export const COST_FREQUENCIES = [
 /** A starting set, so the editor is not an empty grid. Amounts are zero. */
 export const DEFAULT_COSTS = [
   { id: 'lease', label: 'Lease instalment', category: 'lease', frequency: 'monthly', amount: 0, date: null, termMonths: 36 },
-  { id: 'charging', label: 'Charging', category: 'charging', frequency: 'monthly', amount: 0, date: null },
+  { id: 'charging', label: 'Charging', category: 'charging', frequency: 'perKm', amount: 0, date: null },
   { id: 'maintenance', label: 'Maintenance', category: 'maintenance', frequency: 'monthly', amount: 0, date: null },
   { id: 'depreciation', label: 'Depreciation', category: 'depreciation', frequency: 'annual', amount: 0, date: null },
   { id: 'insurance', label: 'Insurance', category: 'insurance', frequency: 'annual', amount: 0, date: null },
@@ -56,13 +62,18 @@ const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
  * adding an insurance policy today does not retroactively charge every past
  * month you look at.
  */
-export function monthlyAmount(cost, month) {
+export function monthlyAmount(cost, month, usage = {}) {
   const amount = Number(cost?.amount) || 0;
   if (!amount) return 0;
 
+  const { daysDriven = 0, kmDriven = 0 } = usage;
   const startsAfter = cost.date && cost.date.slice(0, 7) > month;
 
   switch (cost.frequency) {
+    case 'daily':
+      return startsAfter ? 0 : round2(amount * daysDriven);
+    case 'perKm':
+      return startsAfter ? 0 : round2(amount * kmDriven);
     case 'once':
       return cost.date && cost.date.slice(0, 7) === month ? round2(amount) : 0;
     case 'annual':
@@ -96,9 +107,20 @@ export function remainingTerm(cost, month) {
 }
 
 /** Every cost's contribution to a month, plus the total. */
-export function costsForMonth(costs, month) {
+export function costsForMonth(costs, month, usage = {}) {
   const items = (costs || [])
-    .map((c) => ({ ...c, monthly: monthlyAmount(c, month), remaining: remainingTerm(c, month) }))
+    .map((c) => ({
+      ...c,
+      monthly: monthlyAmount(c, month, usage),
+      remaining: remainingTerm(c, month),
+      // What it was multiplied by, so the card can show the working.
+      basis:
+        c.frequency === 'daily'
+          ? `${usage.daysDriven || 0} days`
+          : c.frequency === 'perKm'
+            ? `${Math.round(usage.kmDriven || 0)} km`
+            : null,
+    }))
     .filter((c) => c.monthly > 0)
     .sort((a, b) => b.monthly - a.monthly);
 

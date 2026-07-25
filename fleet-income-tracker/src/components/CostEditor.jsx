@@ -53,8 +53,10 @@ export default function CostEditor() {
         </span>
       </div>
       <p className="text-xs text-slate-500 mb-3">
-        Yearly costs are spread across twelve months. One-offs count only in the month of their
-        date. The driver never sees any of this.
+        Yearly costs are spread across twelve months; one-offs count only in the month of their
+        date. <span className="text-slate-400">Per day driven</span> and{' '}
+        <span className="text-slate-400">per km driven</span> scale with what the car actually did,
+        so a quiet month costs less — days off are not counted. The driver never sees any of this.
       </p>
 
       {error && <Banner>{error}</Banner>}
