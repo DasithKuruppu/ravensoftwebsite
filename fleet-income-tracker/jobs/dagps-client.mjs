@@ -210,18 +210,47 @@ export async function fetchLocation(session) {
     fixedAt: toIso(d.datetime),
     heartbeatAt: toIso(d.heart_time),
     serverTime: toIso(d.sys_time),
+    // Ages measured against the portal's own clock rather than ours, so a
+    // wrong assumption about its timezone cannot make a live fix look stale.
+    fixAgeSeconds: ageSeconds(d.sys_time, d.datetime),
+    heartbeatAgeSeconds: ageSeconds(d.sys_time, d.heart_time),
     plate: d.user_name || null,
     deviceId: d.sim_id || null,
   };
 }
 
-/** "2026/07/25 11:09:55" (Asia/Colombo) → ISO 8601 with offset. */
+/**
+ * The portal stamps its times at UTC+05:00, NOT Sri Lanka's +05:30.
+ *
+ * Measured 2026-07-25: the portal reported sys_time (its own "now") as
+ * 14:12:38 when Colombo local time was 14:42:44. Reading those stamps as
+ * +05:30 makes every fix look exactly 30 minutes stale, which is what the
+ * dashboard was showing.
+ *
+ * Prefer `ageSeconds()` over this wherever possible — comparing two portal
+ * timestamps cancels the offset out entirely and survives them changing it.
+ */
+const PORTAL_UTC_OFFSET = '+05:00';
+
+/** "2026/07/25 11:09:55" in portal time → ISO 8601 with the right offset. */
 function toIso(value) {
   if (!value) return null;
-  const m = String(value).match(/^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+  const m = String(value).match(/^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
   if (!m) return null;
   const [, y, mo, d, h, mi, s] = m;
-  return `${y}-${mo}-${d}T${h}:${mi}:${s}+05:30`;
+  return `${y}-${mo}-${d}T${h}:${mi}:${s}${PORTAL_UTC_OFFSET}`;
+}
+
+/**
+ * Seconds between two portal timestamps. Both carry the same offset, so this is
+ * correct no matter what timezone the portal decides it is in.
+ */
+function ageSeconds(nowValue, thenValue) {
+  const a = toIso(nowValue);
+  const b = toIso(thenValue);
+  if (!a || !b) return null;
+  const secs = (Date.parse(a) - Date.parse(b)) / 1000;
+  return Number.isFinite(secs) ? Math.round(secs) : null;
 }
 
 /** Midnight of `date` (yyyy-mm-dd) in Asia/Colombo, as epoch milliseconds. */

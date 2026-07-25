@@ -441,7 +441,10 @@ async function vehicleLocation() {
  * than merely imprecise.
  */
 export function deriveMotion(previous, fix) {
-  const heartbeatAgeMin = ageMinutes(fix.serverTime, fix.heartbeatAt);
+  const heartbeatAgeMin =
+    fix.heartbeatAgeSeconds !== null && fix.heartbeatAgeSeconds !== undefined
+      ? fix.heartbeatAgeSeconds / 60
+      : ageMinutes(fix.serverTime, fix.heartbeatAt);
   if (heartbeatAgeMin !== null && heartbeatAgeMin > OFFLINE_AFTER_MIN) {
     return { status: 'offline', speedKmh: null, speedSource: 'none', movedM: null };
   }

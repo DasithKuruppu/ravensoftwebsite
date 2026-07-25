@@ -146,7 +146,7 @@ export default function VehicleMap() {
         <span className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
           <Status loc={loc} />
           <span>
-            fix <Ago iso={loc.fixedAt} />
+            fix <Ago iso={loc.fixedAt} ageSeconds={loc.fixAgeSeconds} />
           </span>
         </span>
       </div>
@@ -400,9 +400,15 @@ function Chip({ tone, children, title }) {
   );
 }
 
-function Ago({ iso }) {
-  if (!iso) return <span>time unknown</span>;
-  const ms = Date.now() - Date.parse(iso);
+/**
+ * Age of the fix. Prefers the age the API measured against the tracker's own
+ * clock — comparing our clock to the portal's timestamp assumes we agree on its
+ * timezone, and we did not: it stamps +05:00, not Colombo's +05:30.
+ */
+function Ago({ iso, ageSeconds }) {
+  let ms;
+  if (ageSeconds !== null && ageSeconds !== undefined) ms = ageSeconds * 1000;
+  else if (iso) ms = Date.now() - Date.parse(iso);
   if (!Number.isFinite(ms)) return <span>time unknown</span>;
   const mins = Math.round(ms / 60000);
   const text =
