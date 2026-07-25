@@ -47,7 +47,6 @@ export default function NextMonth({ summary, isOwner }) {
 
         {isOwner && n.costs && (
           <>
-            <Row label="Owner share" value={money(n.ownerShare)} />
             <Row
               label="Running costs"
               hint={`${amount(n.kmDriven)} km projected`}

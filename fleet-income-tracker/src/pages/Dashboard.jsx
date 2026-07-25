@@ -120,12 +120,7 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
                   <dt className="text-sm font-medium text-slate-300">Total</dt>
                   <dd className="num text-accent text-lg">{money(summary.driverPay)}</dd>
                 </div>
-                {isOwner && summary.ownerShare !== undefined && (
-                  <div className="flex items-baseline justify-between gap-4">
-                    <dt className="text-sm text-slate-400">Owner share</dt>
-                    <dd className="num text-slate-200">{money(summary.ownerShare)}</dd>
-                  </div>
-                )}
+
               </dl>
             </div>
 
@@ -142,8 +137,13 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
                   value={money(summary.projectedDriverPay)}
                   strong
                 />
-                {isOwner && summary.projectedOwnerShare !== undefined && (
-                  <Row label="Projected owner share" value={money(summary.projectedOwnerShare)} />
+                {isOwner && summary.projectedOwnerProfit !== undefined && (
+                  <Row
+                    label="Projected profit"
+                    hint="after running costs"
+                    value={money(summary.projectedOwnerProfit)}
+                    tone={summary.projectedOwnerProfit < 0 ? 'text-danger' : undefined}
+                  />
                 )}
               </dl>
               {summary.elapsedDays > 0 && summary.daysLogged < summary.elapsedDays && (
@@ -201,11 +201,14 @@ function Stat({ label, value, accent = false, target, current }) {
   );
 }
 
-function Row({ label, value, strong = false }) {
+function Row({ label, hint, value, strong = false, tone }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <dt className="text-sm text-slate-400">{label}</dt>
-      <dd className={`num ${strong ? 'text-accent text-lg' : 'text-slate-200'}`}>{value}</dd>
+      <dt className="text-sm text-slate-400">
+        {label}
+        {hint && <span className="block text-xs text-slate-600">{hint}</span>}
+      </dt>
+      <dd className={`num ${tone || (strong ? 'text-accent text-lg' : 'text-slate-200')}`}>{value}</dd>
     </div>
   );
 }

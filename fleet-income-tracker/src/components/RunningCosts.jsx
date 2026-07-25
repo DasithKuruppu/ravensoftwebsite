@@ -13,7 +13,7 @@ import { categoryLabel } from '../../shared/costs.mjs';
  * are absent from the payload entirely rather than merely unrendered.
  */
 export default function RunningCosts({ summary }) {
-  const { costs, ownerShare, ownerProfit, projectedOwnerProfit } = summary;
+  const { costs, revenue, driverPay, ownerProfit, projectedOwnerProfit, driverName } = summary;
   if (!costs) return null;
 
   const loss = ownerProfit < 0;
@@ -61,8 +61,12 @@ export default function RunningCosts({ summary }) {
         {costs.totalPerKm !== null && costs.totalPerKm !== undefined && (
           <Row label="All costs per km" value={amount(costs.totalPerKm)} tone="text-slate-300" />
         )}
-        <Row label="Owner share" hint="revenue less driver pay" value={money(ownerShare)} />
-        <Row label="Running costs" value={`− ${amount(costs.total)}`} tone="text-warn" />
+        {/* The chain in full. "Owner share" used to sit here as an
+            intermediate — revenue less driver pay — but it reads like income
+            when it is really just the amount left to pay for the car with. */}
+        <Row label="Revenue" value={amount(revenue)} />
+        <Row label={`less ${driverName || 'driver'} pay`} value={`− ${amount(driverPay)}`} tone="text-slate-400" />
+        <Row label="less running costs" value={`− ${amount(costs.total)}`} tone="text-warn" />
         <div className="flex items-baseline justify-between gap-4 border-t border-ink-800 pt-2 mt-2">
           <dt className="text-sm font-medium text-slate-300">
             {loss ? 'Shortfall this month' : 'Profit this month'}
@@ -82,8 +86,9 @@ export default function RunningCosts({ summary }) {
 
       {loss && (
         <p className="text-xs text-warn/80 mt-3">
-          Costs exceed the owner share this month. Annual items are spread across twelve months, so
-          a part-month of revenue will always look worse than a full one.
+          Costs exceed what is left after paying {driverName || 'the driver'} this month. Annual
+          items are spread across twelve months, so a part-month of revenue will always look worse
+          than a full one.
         </p>
       )}
     </div>
