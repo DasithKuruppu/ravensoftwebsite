@@ -6,6 +6,7 @@ import TierLadder from '../components/TierLadder.jsx';
 import VehicleMap from '../components/VehicleMap.jsx';
 import CashSplit from '../components/CashSplit.jsx';
 import ProjectionChart from '../components/ProjectionChart.jsx';
+import PushToTier from '../components/PushToTier.jsx';
 
 export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
   const [summary, setSummary] = useState(null);
@@ -49,9 +50,22 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
               </span>
             </div>
           )}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <Stat label="Total revenue (LKR)" value={amount(summary.revenue)} accent />
             <Stat label="Daily average (LKR)" value={amount(summary.dailyAverage)} />
+            {summary.yesterday && (
+              <Stat
+                label="Yesterday (LKR)"
+                value={amount(summary.yesterday.revenue)}
+                // Measured against the pace the next tier needs, not the month
+                // average — against the month average this reads near zero
+                // early on, since recent days ARE the month. Against the
+                // required pace it answers the question that matters: am I on
+                // track today?
+                target={summary.push && !summary.push.reached ? summary.push.catchUpDaily : null}
+                current={summary.yesterday.revenue}
+              />
+            )}
             <Stat label="Trips" value={count(summary.trips)} />
             <Stat
               label="Days logged"
@@ -70,6 +84,10 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
             bandStart={summary.plan.bandStart}
             bandEnd={summary.plan.bandEnd}
           />
+
+          {/* Ahead of the chart: the ask should be the first thing read, and it
+              is the one card written for the driver rather than the owner. */}
+          <PushToTier summary={summary} />
 
           <ProjectionChart summary={summary} />
 
@@ -141,7 +159,10 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
   );
 }
 
-function Stat({ label, value, accent = false }) {
+function Stat({ label, value, accent = false, target, current }) {
+  // A recent average is only meaningful against the pace being chased.
+  const gap = typeof target === 'number' && typeof current === 'number' ? current - target : null;
+  const showTrend = gap !== null && Math.abs(gap) >= 1;
   return (
     <div className="card">
       <div className="label">{label}</div>
@@ -152,6 +173,11 @@ function Stat({ label, value, accent = false }) {
       >
         {value}
       </div>
+      {showTrend && (
+        <div className={`num text-[11px] mt-0.5 ${gap >= 0 ? 'text-accent' : 'text-warn'}`}>
+          {gap >= 0 ? '▲ on pace' : `▼ ${amount(Math.abs(gap))} below pace`}
+        </div>
+      )}
     </div>
   );
 }

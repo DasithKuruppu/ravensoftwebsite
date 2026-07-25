@@ -14,7 +14,7 @@ export default function TierLadder({ revenue, projected, bandStart, bandEnd }) {
   return (
     <div className="card">
       <div className="flex items-baseline justify-between mb-4">
-        <span className="label">Tier ladder</span>
+        <span className="label">Revenue tier ladder</span>
         <span className="text-xs text-slate-500">
           scale to <span className="num">{thousands(max)}</span>
         </span>

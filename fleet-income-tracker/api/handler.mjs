@@ -265,12 +265,24 @@ async function buildSummary(month, auth) {
     elapsedDays,
     operatingTotal,
     revenue,
+    projectedRevenue,
   });
 
   const payload = {
     month,
     revenue,
     series,
+    push: buildPush({
+      settings,
+      factor,
+      revenue,
+      trips,
+      projectedRevenue,
+      dailyAverage: elapsedDays > 0 ? revenue / elapsedDays : 0,
+      elapsedDays,
+      operatingTotal,
+      projectedPay: projected.total,
+    }),
     trips,
     daysLogged,
     daysInMonth,
@@ -283,6 +295,10 @@ async function buildSummary(month, auth) {
     // Average per operating day elapsed — the same run-rate the projection
     // extrapolates, so the two figures always agree with each other.
     dailyAverage: elapsedDays > 0 ? round2(revenue / elapsedDays) : 0,
+    // Yesterday, not a rolling average and not today: today is still being
+    // driven, so it always reads low and would misrepresent recent form.
+    // Yesterday is the last complete day and the fairest recent comparison.
+    yesterday: yesterdayRevenue(entries),
     driverPay: current.total,
     tiers: current.tiers,
     // Both roles see this: the driver needs to know how much cash he is holding.
@@ -482,35 +498,163 @@ async function vehicleLocation() {
 }
 
 /**
- * Cumulative revenue and pay for each operating day of the month.
- *
- * Days up to today are actual; the rest extend the current daily run-rate to
- * month end. Pay is recomputed at each cumulative revenue rather than scaled,
- * because the plan is piecewise — it is flat at the base until revenue reaches
- * the band, then rises at one rate, then a steeper one. That shape is the point
- * of drawing it.
+ * Yesterday's revenue in Asia/Colombo, or null if that day is outside the month
+ * being viewed — a past month has no "yesterday" to speak of.
  */
-function buildSeries({ entries, settings, factor, daysInMonth, elapsedDays, operatingTotal, revenue }) {
-  if (!operatingTotal) return [];
+function yesterdayRevenue(entries) {
+  const date = new Date(Date.parse(`${todayInColombo()}T00:00:00Z`) - 86400000)
+    .toISOString()
+    .slice(0, 10);
+  const entry = entries.find((e) => e.date === date);
+  return entry ? { date, revenue: round2(entry.revenue || 0) } : null;
+}
+
+/**
+ * The next tier, and what it would take to get there.
+ *
+ * Everything is expressed in what the driver controls and receives — trips per
+ * day and his own take-home — not gross revenue, which is the owner's measure
+ * and motivates nobody.
+ *
+ * Two different daily rates matter and they are not the same number: the rate
+ * that would have reached the target had it been kept all month, and the rate
+ * the REMAINING days now need to make up the shortfall. The second is the
+ * honest one once he is behind, and it climbs as the month runs out.
+ */
+function buildPush({
+  settings, factor, revenue, trips, projectedRevenue, dailyAverage,
+  elapsedDays, operatingTotal, projectedPay,
+}) {
+  const plan = prorate(settings, factor);
+  const daysLeft = Math.max(0, operatingTotal - elapsedDays);
+
+  // Which threshold is next, judged on the projection rather than today's
+  // total — the question is where the month is heading.
+  let target = null;
+  let tier = null;
+  if (projectedRevenue < plan.bandStart) {
+    target = plan.bandStart;
+    tier = 'band';
+  } else if (projectedRevenue < plan.bandEnd) {
+    target = plan.bandEnd;
+    tier = 'top';
+  }
+
+  // What one more rupee is worth right now, and after the next threshold.
+  const marginalNow =
+    projectedRevenue < plan.bandStart ? 0 : projectedRevenue < plan.bandEnd ? settings.bandRate : settings.topRate;
+  const marginalNext = tier === 'band' ? settings.bandRate : tier === 'top' ? settings.topRate : null;
+
+  const base = {
+    tier,
+    marginalNow,
+    marginalNext,
+    bandRate: settings.bandRate,
+    topRate: settings.topRate,
+    bandStart: plan.bandStart,
+    bandEnd: plan.bandEnd,
+    dailyAverage: round2(dailyAverage),
+    revenuePerTrip: trips > 0 ? round2(revenue / trips) : null,
+    tripsPerDay: elapsedDays > 0 && trips > 0 ? Math.round((trips / elapsedDays) * 10) / 10 : null,
+    daysLeft,
+  };
+
+  // Already in the top tier — nothing to chase, so say what he is earning.
+  if (!target) return { ...base, reached: true };
+
+  const payAtTarget = calculatePay(target, settings, factor).total;
+  const catchUpDaily = daysLeft > 0 ? (target - revenue) / daysLeft : null;
+  const extraPerDay = catchUpDaily === null ? null : Math.max(0, catchUpDaily - dailyAverage);
+
+  return {
+    ...base,
+    reached: false,
+    target: round2(target),
+    gap: round2(Math.max(0, target - projectedRevenue)),
+    dailyNeeded: round2(target / operatingTotal),
+    catchUpDaily: catchUpDaily === null ? null : round2(catchUpDaily),
+    extraPerDay: extraPerDay === null ? null : round2(extraPerDay),
+    extraTripsPerDay:
+      extraPerDay !== null && trips > 0 && revenue > 0
+        ? Math.round((extraPerDay / (revenue / trips)) * 10) / 10
+        : null,
+    payNow: round2(projectedPay),
+    payAtTarget,
+    payGain: round2(payAtTarget - projectedPay),
+    payGainPct: projectedPay > 0 ? Math.round(((payAtTarget / projectedPay) - 1) * 100) : null,
+  };
+}
+
+/**
+ * Take-home across the month: what it is so far, and where it lands under
+ * different finishes.
+ *
+ * Pay is recomputed at each cumulative revenue rather than scaled, because the
+ * plan is piecewise — flat at the base until revenue reaches the band, then
+ * rising at one rate, then a steeper one. Drawing it is the point: the stretch
+ * line pulls away from the current-pace line only after the threshold, which is
+ * exactly the argument for pushing.
+ *
+ * Returns { actual, scenarios } where scenarios each carry their own projected
+ * tail starting from today's point, so the lines join up.
+ */
+function buildSeries({
+  entries, settings, factor, daysInMonth, elapsedDays, operatingTotal, revenue, projectedRevenue,
+}) {
+  if (!operatingTotal) return { actual: [], scenarios: [] };
 
   const firstDay = daysInMonth - operatingTotal + 1;
   const byDay = new Map(entries.map((e) => [Number(e.date.slice(8, 10)), e.revenue || 0]));
-  const perDay = elapsedDays > 0 ? revenue / elapsedDays : 0;
+  const plan = prorate(settings, factor);
+  const payAt = (r) => calculatePay(r, settings, factor).total;
 
-  const out = [];
+  // Actual, day by day, up to today.
+  const actual = [];
   let cumulative = 0;
-  for (let day = firstDay; day <= daysInMonth; day++) {
-    const elapsedSoFar = day - firstDay + 1;
-    const isProjected = elapsedSoFar > elapsedDays;
-    cumulative = isProjected ? cumulative + perDay : cumulative + (byDay.get(day) || 0);
-    out.push({
-      day,
-      revenue: round2(cumulative),
-      pay: calculatePay(cumulative, settings, factor).total,
-      projected: isProjected,
-    });
+  for (let i = 0; i < elapsedDays; i++) {
+    const day = firstDay + i;
+    cumulative += byDay.get(day) || 0;
+    actual.push({ day, revenue: round2(cumulative), pay: payAt(cumulative) });
   }
-  return out;
+  if (!actual.length) actual.push({ day: firstDay, revenue: 0, pay: payAt(0) });
+
+  const today = actual[actual.length - 1];
+  const daysLeft = operatingTotal - elapsedDays;
+  const lastDay = firstDay + operatingTotal - 1;
+
+  // A finish is described by the revenue it ends on; the tail is a straight
+  // run from today to that number, with pay recomputed along the way.
+  const tail = (endRevenue) => {
+    const pts = [{ day: today.day, pay: today.pay }];
+    for (let i = 1; i <= daysLeft; i++) {
+      const r = today.revenue + ((endRevenue - today.revenue) * i) / daysLeft;
+      pts.push({ day: today.day + i, pay: payAt(r) });
+    }
+    return pts;
+  };
+
+  const scenarios = [
+    { key: 'current', label: 'current pace', endRevenue: round2(projectedRevenue), points: daysLeft > 0 ? tail(projectedRevenue) : [] },
+  ];
+
+  // The stretch: the next threshold that actually pays more than today's pace.
+  const stretch = projectedRevenue < plan.bandEnd ? plan.bandEnd : null;
+  if (stretch !== null && daysLeft > 0) {
+    scenarios.push({ key: 'stretch', label: 'if you reach tier 3', endRevenue: round2(stretch), points: tail(stretch) });
+  }
+
+  for (const sc of scenarios) {
+    sc.endPay = sc.points.length ? sc.points[sc.points.length - 1].pay : today.pay;
+    // The share of that month's revenue the driver ends up keeping. Not the
+    // tier rate — the effective rate across the whole month, which is what
+    // "my commission" actually means to him.
+    sc.effectiveRate = sc.endRevenue > 0 ? Math.round((sc.endPay / sc.endRevenue) * 1000) / 10 : null;
+    // What the LAST rupee at that finish is worth: the tier rate he would be on.
+    sc.marginalRate =
+      sc.endRevenue < plan.bandStart ? 0 : sc.endRevenue < plan.bandEnd ? settings.bandRate : settings.topRate;
+  }
+
+  return { actual, scenarios, lastDay };
 }
 
 /**
