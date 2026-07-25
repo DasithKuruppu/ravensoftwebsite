@@ -44,6 +44,7 @@ export default function Settings() {
         startDate: form.startDate || null,
         capitalInvested: form.capitalInvested === '' ? null : Number(form.capitalInvested),
         alternativeRatePct: Number(form.alternativeRatePct) || 0,
+        leasedPercent: Number(form.leasedPercent) || 0,
         driverName: (form.driverName || '').trim() || 'Driver',
         base: Number(form.base),
         bandStart: Number(form.bandStart),
@@ -189,6 +190,19 @@ export default function Settings() {
               className="num"
               value={form.capitalInvested ?? ''}
               onChange={(e) => setForm({ ...form, capitalInvested: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-1">
+            <label className="label" htmlFor="leasedPercent">
+              Share financed by lease (%)
+            </label>
+            <input
+              id="leasedPercent"
+              type="number"
+              step="5"
+              className="num"
+              value={form.leasedPercent ?? ''}
+              onChange={(e) => setForm({ ...form, leasedPercent: e.target.value })}
             />
           </div>
           <div className="grid gap-1">

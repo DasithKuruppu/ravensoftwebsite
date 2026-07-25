@@ -36,7 +36,7 @@ export default function ReturnOnCapital({ summary }) {
       {/* The comparison, side by side. */}
       <div className="grid grid-cols-2 gap-3">
         <Side
-          label="The car"
+          label={r.leasedPct > 0 ? 'The car, on your equity' : 'The car'}
           pct={`${r.annualisedReturnPct}%`}
           sub={`${money(summary.projectedOwnerProfit)}/month`}
           tone={tone}
@@ -52,7 +52,18 @@ export default function ReturnOnCapital({ summary }) {
       </div>
 
       <dl className="mt-4 space-y-1.5">
-        <Row label="Capital in the vehicle" value={amount(r.capital)} />
+        <Row label="Vehicle value" value={amount(r.capital)} />
+        {r.leasedPct > 0 && (
+          <>
+            <Row
+              label={`Leased (${r.leasedPct}%)`}
+              hint="the financier's money, not yours — paid for by the instalment"
+              value={amount(r.leased)}
+              tone="text-slate-500"
+            />
+            <Row label="Your own money in it" value={amount(r.equity)} />
+          </>
+        )}
         <Row
           label="Profit, annualised"
           hint="this month's projection × 12"
@@ -75,6 +86,14 @@ export default function ReturnOnCapital({ summary }) {
           </dd>
         </div>
       </dl>
+
+      {r.leasedPct > 0 && (
+        <p className="text-xs text-slate-500 mt-3">
+          Interest is charged only on the <span className="num">{amount(r.equity)}</span> you put in.
+          The leased {r.leasedPct}% costs you the instalment, which is already in running costs —
+          counting it here too would bill it twice.
+        </p>
+      )}
 
       <p className="text-xs text-slate-500 mt-3">
         {beatsFd

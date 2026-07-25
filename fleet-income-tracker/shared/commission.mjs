@@ -32,6 +32,8 @@ export const DEFAULT_SETTINGS = {
   capitalInvested: null,
   /** The alternative the capital could have earned, annual %. */
   alternativeRatePct: 9,
+  /** Share of the vehicle financed by lease, %. The rest is own equity. */
+  leasedPercent: 0,
 };
 
 /**

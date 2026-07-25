@@ -10,7 +10,8 @@
  * monthly total meaningless:
  *
  *   once     a single event on a date — a service, one charging session
- *   monthly  a recurring monthly charge — a data package
+ *   monthly  a recurring monthly charge — a data package, or a lease
+ *            instalment, which may carry a term after which it stops
  *   annual   billed yearly — insurance, revenue licence. Spread across twelve
  *            months, because charging a whole year's insurance to March would
  *            make March look catastrophic and the other eleven months rosy.
@@ -19,6 +20,7 @@
  */
 
 export const COST_CATEGORIES = [
+  { key: 'lease', label: 'Lease instalment' },
   { key: 'charging', label: 'Charging / electricity' },
   { key: 'maintenance', label: 'Maintenance & repairs' },
   { key: 'depreciation', label: 'Depreciation' },
@@ -36,6 +38,7 @@ export const COST_FREQUENCIES = [
 
 /** A starting set, so the editor is not an empty grid. Amounts are zero. */
 export const DEFAULT_COSTS = [
+  { id: 'lease', label: 'Lease instalment', category: 'lease', frequency: 'monthly', amount: 0, date: null, termMonths: 36 },
   { id: 'charging', label: 'Charging', category: 'charging', frequency: 'monthly', amount: 0, date: null },
   { id: 'maintenance', label: 'Maintenance', category: 'maintenance', frequency: 'monthly', amount: 0, date: null },
   { id: 'depreciation', label: 'Depreciation', category: 'depreciation', frequency: 'annual', amount: 0, date: null },
@@ -65,15 +68,37 @@ export function monthlyAmount(cost, month) {
     case 'annual':
       return startsAfter ? 0 : round2(amount / 12);
     case 'monthly':
-    default:
-      return startsAfter ? 0 : round2(amount);
+    default: {
+      if (startsAfter) return 0;
+      // A lease runs for a fixed term. Without one it would keep charging the
+      // month after the last instalment was paid, quietly understating profit
+      // for the rest of the vehicle's life.
+      const term = Number(cost.termMonths) || 0;
+      if (term > 0 && cost.date && monthsBetween(cost.date.slice(0, 7), month) >= term) return 0;
+      return round2(amount);
+    }
   }
+}
+
+/** Whole months from one yyyy-mm to another. */
+export function monthsBetween(fromMonth, toMonth) {
+  const [fy, fm] = fromMonth.split('-').map(Number);
+  const [ty, tm] = toMonth.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+}
+
+/** Instalments left to pay on a fixed-term cost, as of `month`. */
+export function remainingTerm(cost, month) {
+  const term = Number(cost?.termMonths) || 0;
+  if (!term || !cost.date) return null;
+  const elapsed = monthsBetween(cost.date.slice(0, 7), month);
+  return Math.max(0, term - Math.max(0, elapsed));
 }
 
 /** Every cost's contribution to a month, plus the total. */
 export function costsForMonth(costs, month) {
   const items = (costs || [])
-    .map((c) => ({ ...c, monthly: monthlyAmount(c, month) }))
+    .map((c) => ({ ...c, monthly: monthlyAmount(c, month), remaining: remainingTerm(c, month) }))
     .filter((c) => c.monthly > 0)
     .sort((a, b) => b.monthly - a.monthly);
 

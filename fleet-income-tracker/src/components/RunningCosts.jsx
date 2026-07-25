@@ -39,6 +39,7 @@ export default function RunningCosts({ summary }) {
                   {categoryLabel(c.category)}
                   {c.frequency === 'annual' && ' · yearly ÷ 12'}
                   {c.frequency === 'once' && ' · one-off'}
+                  {c.remaining !== null && c.remaining !== undefined && ` · ${c.remaining} left`}
                 </span>
               </dt>
               <dd className="num text-slate-300">{amount(c.monthly)}</dd>

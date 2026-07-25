@@ -172,6 +172,7 @@ async function route(method, path, event, cors) {
               : null,
         capitalInvested: toNumber(body.capitalInvested) ?? current.capitalInvested ?? null,
         alternativeRatePct: toNumber(body.alternativeRatePct) ?? current.alternativeRatePct ?? 9,
+        leasedPercent: clampPct(toNumber(body.leasedPercent) ?? current.leasedPercent ?? 0),
         driverName:
           typeof body.driverName === 'string' && body.driverName.trim()
             ? body.driverName.trim().slice(0, 40)
@@ -818,20 +819,33 @@ function buildRoi({ settings, projectedProfit }) {
   const ratePct = Number(settings.alternativeRatePct) || 0;
   if (capital <= 0) return null;
 
-  const monthlyAlternative = round2((capital * (ratePct / 100)) / 12);
+  // Only the unleased share is money that could have been on deposit instead.
+  // The leased portion was never yours to invest — the financier put it up, and
+  // you pay for that through the instalment, which is already in running costs.
+  // Charging opportunity cost on the whole vehicle would bill you twice for the
+  // same 40%.
+  const leasedPct = clampPct(Number(settings.leasedPercent) || 0);
+  const equity = round2(capital * (1 - leasedPct / 100));
+  const leased = round2(capital - equity);
+
+  const monthlyAlternative = round2((equity * (ratePct / 100)) / 12);
   const annualisedProfit = round2(projectedProfit * 12);
 
   return {
     capital: round2(capital),
+    leasedPct,
+    leased,
+    equity,
     ratePct,
     monthlyAlternative,
     annualisedProfit,
-    // Return the car earns on the money sunk into it, annualised.
-    annualisedReturnPct: Math.round((annualisedProfit / capital) * 1000) / 10,
-    // What is left after charging the capital its alternative return.
+    // Return on the money actually put in, not on the sticker price.
+    annualisedReturnPct: equity > 0 ? Math.round((annualisedProfit / equity) * 1000) / 10 : null,
     economicProfit: round2(projectedProfit - monthlyAlternative),
   };
 }
+
+const clampPct = (n) => Math.min(100, Math.max(0, Number(n) || 0));
 
 /** Normalise a cost line before storing it. */
 function cleanCost(c) {
@@ -847,6 +861,8 @@ function cleanCost(c) {
     // A one-off needs its date; a recurring cost may carry a start date so it
     // does not apply to months before it existed.
     date: /^\d{4}-\d{2}-\d{2}$/.test(c.date || '') ? c.date : null,
+    // Instalments, for a lease or any other cost that ends.
+    termMonths: toNumber(c.termMonths) > 0 ? Math.round(toNumber(c.termMonths)) : null,
   };
 }
 
