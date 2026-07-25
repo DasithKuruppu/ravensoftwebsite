@@ -5,9 +5,9 @@
   "type": "commonjs",
   "scripts": {
     "synth": "cdk synth",
-    "diff": "cdk diff",
-    "deploy": "cdk deploy --outputs-file cdk-outputs.json --require-approval never",
-    "destroy": "cdk destroy"
+    "diff": "AWS_PROFILE=${AWS_PROFILE:-scrawl} cdk diff",
+    "deploy": "AWS_PROFILE=${AWS_PROFILE:-scrawl} cdk deploy --outputs-file cdk-outputs.json --require-approval never",
+    "destroy": "AWS_PROFILE=${AWS_PROFILE:-scrawl} cdk destroy"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.248.0",

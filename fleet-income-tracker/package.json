@@ -19,9 +19,13 @@
     "uber:check": "node scripts/uber-check.mjs",
     "dagps:sync": "node scripts/dagps-sync.mjs",
     "hash-password": "node scripts/hash-password.mjs",
-    "deploy": "bash scripts/deploy.sh",
-    "deploy:frontend": "bash scripts/deploy-frontend.sh",
-    "synth": "npm --prefix infra run synth"
+    "deploy": "AWS_PROFILE=${AWS_PROFILE:-scrawl} bash scripts/deploy.sh",
+    "deploy:frontend": "AWS_PROFILE=${AWS_PROFILE:-scrawl} bash scripts/deploy-frontend.sh",
+    "synth": "npm --prefix infra run synth",
+    "sync:gps": "AWS_PROFILE=${AWS_PROFILE:-scrawl} aws lambda invoke --region us-east-1 --function-name fleet-tracker-sync --payload '{\"job\":\"dagps\"}' --cli-binary-format raw-in-base64-out /dev/stdout",
+    "logs:api": "AWS_PROFILE=${AWS_PROFILE:-scrawl} aws logs tail /aws/lambda/fleet-tracker-api --region us-east-1 --follow",
+    "logs:sync": "AWS_PROFILE=${AWS_PROFILE:-scrawl} aws logs tail /aws/lambda/fleet-tracker-sync --region us-east-1 --follow",
+    "whoami": "AWS_PROFILE=${AWS_PROFILE:-scrawl} aws sts get-caller-identity"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",

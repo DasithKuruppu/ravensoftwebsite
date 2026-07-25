@@ -23,10 +23,39 @@ async function readParam(envName, ssmName) {
   if (!ssmName) return undefined;
   const { SSMClient, GetParameterCommand } = await import('@aws-sdk/client-ssm');
   const client = new SSMClient({ region: process.env.AWS_REGION || 'us-east-1' });
-  const res = await client.send(
-    new GetParameterCommand({ Name: ssmName, WithDecryption: true }),
-  );
-  return res.Parameter?.Value;
+  try {
+    const res = await client.send(
+      new GetParameterCommand({ Name: ssmName, WithDecryption: true }),
+    );
+    return res.Parameter?.Value;
+  } catch (err) {
+    // SSM's ParameterNotFound carries an empty message, which surfaces to the
+    // browser as the useless "UnknownError". Say what is actually missing and
+    // how to fix it — this is a deployment step, not a bug.
+    if (err.name === 'ParameterNotFound' || err.__type === 'ParameterNotFound') {
+      throw new ConfigError(
+        `Missing SSM parameter "${ssmName}". Create it with:\n` +
+          `  aws ssm put-parameter --region ${process.env.AWS_REGION || 'us-east-1'} ` +
+          `--type SecureString --overwrite --name ${ssmName} --value '<value>'\n` +
+          '(see deploy.md section 4)',
+      );
+    }
+    if (err.name === 'AccessDeniedException') {
+      throw new ConfigError(
+        `Not allowed to read SSM parameter "${ssmName}" — check the Lambda's IAM policy.`,
+      );
+    }
+    throw err;
+  }
+}
+
+/** A misconfiguration rather than a runtime fault: worth reporting verbatim. */
+export class ConfigError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ConfigError';
+    this.isConfigError = true;
+  }
 }
 
 async function config() {
@@ -37,7 +66,7 @@ async function config() {
     readParam('OWNER_PASSWORD_HASH', `${prefix}/owner-password-hash`),
     readParam('DRIVER_PASSWORD_HASH', `${prefix}/driver-password-hash`),
   ]);
-  if (!secret) throw new Error('JWT secret is not configured');
+  if (!secret) throw new ConfigError('JWT secret is not configured');
   cachedConfig = { secret, hashes: { owner: ownerHash, driver: driverHash } };
   return cachedConfig;
 }

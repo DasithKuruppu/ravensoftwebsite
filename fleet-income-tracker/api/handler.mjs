@@ -48,7 +48,13 @@ export async function handler(event) {
     return await route(method, path, event, cors);
   } catch (err) {
     console.error('unhandled error', err);
-    return json(500, { error: 'internal_error', message: err.message }, cors);
+    // A missing or unreadable secret is a deployment step that was skipped, not
+    // a fault in the request. Return the actionable message rather than the
+    // SDK's opaque "UnknownError".
+    if (err.isConfigError) {
+      return json(500, { error: 'not_configured', message: err.message }, cors);
+    }
+    return json(500, { error: 'internal_error', message: err.message || err.name || 'unknown' }, cors);
   }
 }
 

@@ -177,6 +177,22 @@ year; `index.html` is sent with `no-cache` so a deploy is visible immediately.
 
 ---
 
+## 5b. Handy scripts
+
+Every AWS-touching script defaults to the `scrawl` profile (account
+191331702653). Override with `AWS_PROFILE=other npm run …`.
+
+```bash
+npm run whoami         # which account am I pointed at?
+npm run deploy         # infra + frontend
+npm run deploy:frontend
+npm run sync:gps       # trigger the DAGPS mileage pull now, without waiting for 23:30
+npm run logs:api       # tail the API Lambda
+npm run logs:sync      # tail the sync Lambda
+```
+
+---
+
 ## 6. Tail the logs
 
 ```bash
@@ -193,10 +209,13 @@ aws logs tail /aws/lambda/fleet-tracker-api --since 1h --region us-east-1
 Fire the sync by hand without waiting for the schedule:
 
 ```bash
-aws lambda invoke --region us-east-1 \
-  --function-name fleet-tracker-sync \
-  --payload '{"job":"dagps"}' --cli-binary-format raw-in-base64-out /dev/stdout
+npm run sync:gps
+# -> {"job":"dagps","status":"ok","from":"2026-07-19","to":"2026-07-25","days":7,"written":6}
 ```
+
+The sync needs `/fleet-tracker/dagps-user` and `/fleet-tracker/dagps-pass` in
+SSM (section 4). Without them it throws rather than writing anything, and the
+nightly run fails silently apart from a CloudWatch log line.
 
 ---
 

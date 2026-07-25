@@ -180,10 +180,15 @@ into the tracker portal and reads real daily mileage — plain `fetch`, no
 headless browser, no scraping library.
 
 ```bash
-npm run dagps:sync                            # last 7 days
+npm run dagps:sync                            # last 7 days, against the local store
 npm run dagps:sync -- 2026-07-01 2026-07-25   # explicit range
 npm run dagps:sync -- --dry-run               # fetch and print, write nothing
+
+npm run sync:gps                              # trigger the DEPLOYED nightly job now
 ```
+
+`dagps:sync` runs locally and writes to the local store; `sync:gps` invokes the
+deployed Lambda and writes to DynamoDB.
 
 The same code runs nightly in the sync Lambda. Protocol notes (verified against
 the live portal, and documented in full in the client's header):
