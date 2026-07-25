@@ -10,6 +10,7 @@ import PushToTier from '../components/PushToTier.jsx';
 import RunningCosts from '../components/RunningCosts.jsx';
 import ReturnOnCapital from '../components/ReturnOnCapital.jsx';
 import NextMonth from '../components/NextMonth.jsx';
+import DirectCosts from '../components/DirectCosts.jsx';
 
 export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
   const [summary, setSummary] = useState(null);
@@ -107,6 +108,8 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
           )}
 
           <div className="grid md:grid-cols-2 gap-5">
+            {/* Shown to both roles — the driver can act on charging costs. */}
+            <DirectCosts summary={summary} />
             <CashSplit summary={summary} />
 
             <div className="card">

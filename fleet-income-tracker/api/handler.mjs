@@ -26,7 +26,13 @@ import {
 } from '../shared/commission.mjs';
 import { store, DEFAULT_DRIVER } from './store.mjs';
 import { login, verifyToken, isOwner } from './auth.mjs';
-import { costsForMonth, levelisedMonthly, COST_CATEGORIES, COST_FREQUENCIES } from '../shared/costs.mjs';
+import {
+  costsForMonth,
+  levelisedMonthly,
+  isDriverVisible,
+  COST_CATEGORIES,
+  COST_FREQUENCIES,
+} from '../shared/costs.mjs';
 import {
   credentials as dagpsCredentials,
   login as dagpsLogin,
@@ -376,6 +382,20 @@ async function buildSummary(month, auth) {
     plan: { bandStart: effectivePlan.bandStart, bandEnd: effectivePlan.bandEnd, base: effectivePlan.base },
   };
 
+  // Costs the driver is allowed to see — the direct cost of his own driving.
+  // Computed for both roles, unlike the full ledger.
+  const allCosts = await store.getCosts();
+  const directCosts = costsForMonth(allCosts.filter(isDriverVisible), month, {
+    daysDriven: workedDays,
+    kmDriven,
+  });
+  payload.directCosts = {
+    ...directCosts,
+    perKm: kmDriven > 0 ? round2(directCosts.total / kmDriven) : null,
+    kmDriven,
+    shareOfRevenue: revenue > 0 ? Math.round((directCosts.total / revenue) * 1000) / 10 : null,
+  };
+
   // Next month at the current rate. Worth its own figure because this month is
   // partial — the plan is prorated and the revenue covers only part of it — so
   // it says nothing about what a steady month looks like. Next month runs on
@@ -397,7 +417,7 @@ async function buildSummary(month, auth) {
     // month: days driven excludes days off, and distance prefers the GPS
     // reading over Uber's, since charging pays for every kilometre rather than
     // only the on-trip ones.
-    const costs = costsForMonth(await store.getCosts(), month, {
+    const costs = costsForMonth(allCosts, month, {
       daysDriven: workedDays,
       kmDriven,
     });
@@ -411,7 +431,7 @@ async function buildSummary(month, auth) {
     // Owner-only half of next month: what it costs and what it leaves.
     if (payload.nextMonth) {
       const nm = payload.nextMonth;
-      const nmCosts = costsForMonth(await store.getCosts(), nm.month, {
+      const nmCosts = costsForMonth(allCosts, nm.month, {
         daysDriven: nm.days,
         kmDriven: nm.kmDriven,
       });
@@ -424,7 +444,7 @@ async function buildSummary(month, auth) {
     // that ends part-way through is not charged as if it ran forever.
     const horizonMonths = Math.round((Number(settings.holdingYears) || 5) * 12);
     const levelised = payload.nextMonth
-      ? levelisedMonthly(await store.getCosts(), payload.nextMonth.month, {
+      ? levelisedMonthly(allCosts, payload.nextMonth.month, {
           daysDriven: payload.nextMonth.days,
           kmDriven: payload.nextMonth.kmDriven,
         }, horizonMonths)
@@ -978,6 +998,9 @@ function cleanCost(c) {
     date: /^\d{4}-\d{2}-\d{2}$/.test(c.date || '') ? c.date : null,
     // Instalments, for a lease or any other cost that ends.
     termMonths: toNumber(c.termMonths) > 0 ? Math.round(toNumber(c.termMonths)) : null,
+    // Whether the driver sees this line. Undefined falls back to the category
+    // default, so existing charging lines become visible without re-entry.
+    driverVisible: c.driverVisible === undefined ? undefined : c.driverVisible === true,
   };
 }
 

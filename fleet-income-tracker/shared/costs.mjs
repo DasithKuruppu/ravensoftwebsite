@@ -42,10 +42,26 @@ export const COST_FREQUENCIES = [
   { key: 'annual', label: 'Every year' },
 ];
 
+/**
+ * Costs the driver may see, by default.
+ *
+ * Charging is his to influence: he chooses where and when to plug in, and the
+ * difference between the cheapest and dearest CCS2 tariff is nearly threefold.
+ * Everything else — the lease, depreciation, insurance — is the owner's
+ * position and none of his business.
+ */
+export const DRIVER_VISIBLE_BY_DEFAULT = ['charging'];
+
+export function isDriverVisible(cost) {
+  if (cost?.driverVisible === true) return true;
+  if (cost?.driverVisible === false) return false;
+  return DRIVER_VISIBLE_BY_DEFAULT.includes(cost?.category);
+}
+
 /** A starting set, so the editor is not an empty grid. Amounts are zero. */
 export const DEFAULT_COSTS = [
   { id: 'lease', label: 'Lease instalment', category: 'lease', frequency: 'monthly', amount: 0, date: null, termMonths: 36 },
-  { id: 'charging', label: 'Charging', category: 'charging', frequency: 'perKm', amount: 0, date: null },
+  { id: 'charging', label: 'Charging', category: 'charging', frequency: 'perKm', amount: 0, date: null, driverVisible: true },
   { id: 'maintenance', label: 'Maintenance', category: 'maintenance', frequency: 'monthly', amount: 0, date: null },
   { id: 'depreciation', label: 'Depreciation', category: 'depreciation', frequency: 'annual', amount: 0, date: null },
   { id: 'insurance', label: 'Insurance', category: 'insurance', frequency: 'annual', amount: 0, date: null },

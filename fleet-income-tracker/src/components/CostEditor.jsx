@@ -6,6 +6,7 @@ import {
   DEFAULT_COSTS,
   costsForMonth,
   remainingTerm,
+  isDriverVisible,
 } from '../../shared/costs.mjs';
 import { amount } from '../format.js';
 import { currentMonth } from '../format.js';
@@ -40,6 +41,7 @@ export default function CostEditor() {
           ...r,
           amount: Number(r.amount) || 0,
           termMonths: r.termMonths ? Number(r.termMonths) : null,
+          driverVisible: isDriverVisible(r),
         })),
       );
       setRows(res.costs);
@@ -89,6 +91,7 @@ export default function CostEditor() {
               <th className="th text-right">Amount</th>
               <th className="th">Starts / on</th>
               <th className="th text-right">Months</th>
+              <th className="th text-center">Driver sees</th>
               <th className="th text-right">Per month</th>
               <th className="th"></th>
             </tr>
@@ -153,6 +156,17 @@ export default function CostEditor() {
                   ) : (
                     <span className="text-xs text-slate-700">—</span>
                   )}
+                </td>
+                <td className="td text-center">
+                  {/* Charging is his to influence; the lease and depreciation
+                      are not. Off by default for everything but charging. */}
+                  <input
+                    type="checkbox"
+                    checked={isDriverVisible(r)}
+                    onChange={(e) => patch(i, 'driverVisible', e.target.checked)}
+                    className="w-4 h-4 accent-emerald-500"
+                    title="Show this line to the driver"
+                  />
                 </td>
                 <td className="td num text-right text-slate-400">
                   {amount(preview.items.find((x) => x.id === r.id)?.monthly ?? 0)}
