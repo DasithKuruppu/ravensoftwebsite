@@ -80,53 +80,56 @@ export const DEFAULT_CHARGERS = [
   /* ── Keells / John Keells CG Auto network: CCS2 + CHAdeMO stated per site on
      their public locator (200+ stations). Positions matched to the Keells
      outlet in OpenStreetMap, so a branch with two nearby stores is 'approx'.
-     Hours 07:00–19:00 unless noted — these are not 24/7. ── */
+     Open 24/7 and LKR 150/kWh flat (both owner-confirmed 2026-07-25). The
+     JKCG page's 07:00–19:00 is showroom hours, not charger availability.
+     Flat-rate, so unlike LECO there is no overnight discount — at 150 these
+     are the dearest option here whatever the hour. ── */
   {
     id: 'keells-darley-road', name: 'Keells · Darley Road', address: 'T.B. Jaya Mw, Colombo 10',
     lat: 6.92310, lng: 79.86430, network: 'Keells / JKCG', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], hours: '07:00–19:00',
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'approx', source: 'johnkeellscgauto.com',
   },
   {
     id: 'keells-rajagiriya', name: 'Keells · Rajagiriya', address: 'Rajagiriya',
     lat: 6.90687, lng: 79.9023, network: 'Keells / JKCG', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], hours: '07:00–19:00',
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'exact', source: 'johnkeellscgauto.com',
   },
   {
     id: 'keells-kohuwala', name: 'Keells · Kohuwala', address: 'Sunethradevi Rd, Kohuwala',
     lat: 6.86958, lng: 79.88074, network: 'Keells / JKCG', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], hours: '07:00–19:00',
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'exact', source: 'johnkeellscgauto.com',
   },
   {
     id: 'keells-nugegoda', name: 'Keells · Nugegoda', address: 'Nawala Rd, Nugegoda',
     lat: 6.87139, lng: 79.88506, network: 'Keells / JKCG', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], hours: '07:00–19:00',
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'approx', source: 'johnkeellscgauto.com',
   },
   {
     id: 'keells-maharagama', name: 'Keells · Maharagama', address: 'High Level Rd, Maharagama',
     lat: 6.84278, lng: 79.92085, network: 'Keells / JKCG', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], hours: '07:00–19:00',
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'exact', source: 'johnkeellscgauto.com',
   },
   {
     id: 'keells-kottawa', name: 'Keells · Kottawa', address: 'Athurugiriya Rd, Kottawa',
     lat: 6.83663, lng: 79.96524, network: 'Keells / JKCG', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], hours: '07:00–19:00',
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'exact', source: 'johnkeellscgauto.com',
   },
   {
     id: 'keells-werahera', name: 'Keells · Werahera / Boralesgamuwa', address: 'Boralesgamuwa',
     lat: 6.83314, lng: 79.90729, network: 'Keells / JKCG', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], hours: '07:00–19:00',
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'exact', source: 'johnkeellscgauto.com',
   },
   {
     id: 'arpico-nawinna', name: 'Arpico Super Centre · Nawinna', address: 'High Level Rd, Nawinna',
     lat: 6.84860, lng: 79.91170, network: 'Arpico / JKCG', app: 'VOLT Charge',
-    connectors: ['CCS2'], hours: '07:00–19:00',
+    connectors: ['CCS2'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'approx', source: 'johnkeellscgauto.com',
   },
 
@@ -134,25 +137,25 @@ export const DEFAULT_CHARGERS = [
   {
     id: 'volt-keells-karapitiya', name: 'VOLT · Keells Karapitiya', address: 'Hirimbura Cross Rd, Galle',
     lat: 6.06388, lng: 80.22207, network: 'VOLT Charge', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 142,
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'exact', source: 'PlugShare',
   },
   {
     id: 'volt-keells-matara', name: 'VOLT · Keells Matara', address: 'Welewatta, Matara',
     lat: 5.94779, lng: 80.53604, network: 'VOLT Charge', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], flatRate: 142,
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'exact', source: 'PlugShare',
   },
   {
     id: 'volt-keells-miriswatta', name: 'VOLT · Keells Miriswatta', address: 'Gampaha',
     lat: 7.19742, lng: 79.935, network: 'VOLT Charge', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], flatRate: 142,
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'approx', source: 'PlugShare',
   },
   {
     id: 'volt-keells-jaffna', name: 'VOLT · Keells Jaffna', address: 'Clock Tower Rd, Jaffna',
     lat: 9.66509, lng: 80.0093, network: 'VOLT Charge', app: 'VOLT Charge',
-    connectors: ['CCS2', 'CHAdeMO'], flatRate: 142,
+    connectors: ['CCS2', 'CHAdeMO'], hours: '24/7', flatRate: 150,
     ccs2: 'confirmed', position: 'approx', source: 'johnkeellscgauto.com',
   },
 

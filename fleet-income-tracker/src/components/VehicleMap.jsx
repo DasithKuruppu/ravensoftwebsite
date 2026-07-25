@@ -51,6 +51,16 @@ export default function VehicleMap() {
   );
   const hiddenCount = chargers.length - pool.length;
 
+  // The nearest charger is often not the cheapest — LKR 150 against 70 is real
+  // money per charge — so both are called out, separately and side by side.
+  const closest = near[0] || null;
+  const cheapest = useMemo(() => {
+    const priced = near.filter((c) => rateNow(c) !== null);
+    if (!priced.length) return null;
+    return priced.reduce((best, c) => (rateNow(c) < rateNow(best) ? c : best));
+  }, [near]);
+  const sameSite = closest && cheapest && closest.id === cheapest.id;
+
   // Create the map once, then repaint markers whenever the selection changes.
   useEffect(() => {
     if (!loc?.available || !mapEl.current) return;
@@ -77,11 +87,22 @@ export default function VehicleMap() {
 
     for (const c of near) {
       const rate = rateNow(c);
-      L.marker([c.lat, c.lng], { icon: pin(rateColour(rate), c.ccs2 === 'confirmed' ? '⚡' : '?') })
+      const isCheapest = cheapest && c.id === cheapest.id;
+      const isClosest = closest && c.id === closest.id;
+      L.marker([c.lat, c.lng], {
+        icon: pin(
+          rateColour(rate),
+          c.ccs2 === 'confirmed' ? '⚡' : '?',
+          isCheapest ? '#4ade80' : isClosest ? '#e2e8f0' : null,
+        ),
+        zIndexOffset: isCheapest || isClosest ? 500 : 0,
+      })
         .bindPopup(
           `<b>${escapeHtml(c.name)}</b><br>${escapeHtml(c.address || '')}` +
             `<br>${c.distanceKm} km away` +
             (rate ? `<br><b>LKR ${rate}/kWh</b> (${TOU_BANDS[band].label.toLowerCase()})` : '<br>rate unknown') +
+            (isCheapest ? '<br><span style="color:#4ade80;font-weight:600">✓ cheapest shown</span>' : '') +
+            (isClosest ? '<br><span style="color:#e2e8f0;font-weight:600">✓ closest</span>' : '') +
             (c.app ? `<br>App: ${escapeHtml(c.app)}` : '') +
             (c.ccs2 === 'confirmed'
               ? `<br><span style="color:#4ade80">CCS2 confirmed</span>${c.source ? ` · ${escapeHtml(c.source)}` : ''}`
@@ -100,7 +121,7 @@ export default function VehicleMap() {
 
     // The container is sized by CSS after mount; Leaflet needs telling.
     setTimeout(() => map.invalidateSize(), 0);
-  }, [loc, near, band]);
+  }, [loc, near, band, cheapest, closest]);
 
   useEffect(() => () => mapRef.current?.remove(), []);
 
@@ -165,6 +186,17 @@ export default function VehicleMap() {
         </div>
       </div>
 
+      {(closest || cheapest) && (
+        <div className="grid sm:grid-cols-2 gap-3 mt-3">
+          <Pick
+            title={sameSite ? 'Closest — and cheapest' : 'Closest'}
+            tone={sameSite ? 'accent' : 'slate'}
+            charger={closest}
+          />
+          {!sameSite && <Pick title="Cheapest" tone="accent" charger={cheapest} />}
+        </div>
+      )}
+
       {near.length > 0 && (
         <ul className="mt-3 divide-y divide-ink-800 border-t border-ink-800">
           {near.map((c) => {
@@ -180,6 +212,11 @@ export default function VehicleMap() {
                         title="A charger exists here, but nobody has confirmed a CCS2 gun. Check before relying on it."
                       >
                         CCS2 not sure
+                      </span>
+                    )}
+                    {cheapest && c.id === cheapest.id && (
+                      <span className="text-[10px] uppercase tracking-wider text-accent border border-accent/40 bg-accent/10 rounded px-1">
+                        cheapest
                       </span>
                     )}
                     {c.position === 'approx' && (
@@ -198,11 +235,15 @@ export default function VehicleMap() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
-                    <div className={`num text-sm ${rate ? rateClass(rate) : 'text-slate-600'}`}>
-                      {rate ? `LKR ${amount(rate)}` : '—'}
+                  <div
+                    className={`text-right rounded-md border px-2 py-1 ${
+                      rate ? rateChip(rate) : 'border-ink-700 text-slate-600'
+                    }`}
+                  >
+                    <div className="num text-sm font-semibold leading-tight">
+                      {rate ? amount(rate) : '—'}
                     </div>
-                    <div className="text-[10px] text-slate-600">per kWh</div>
+                    <div className="text-[10px] opacity-70 leading-tight">LKR/kWh</div>
                   </div>
                   <a
                     href={directionsUrl(c.lat, c.lng)}
@@ -229,12 +270,48 @@ export default function VehicleMap() {
   );
 }
 
+/**
+ * One of the two headline choices. The rate is the point of the tile, so it is
+ * the largest thing in it — the nearest charger being nearly twice the price is
+ * exactly the decision this is meant to inform.
+ */
+function Pick({ title, tone, charger }) {
+  if (!charger) return null;
+  const rate = rateNow(charger);
+  const accent = tone === 'accent';
+  return (
+    <div
+      className={`rounded-md border px-3 py-2 ${
+        accent ? 'border-accent/40 bg-accent/5' : 'border-ink-700 bg-ink-950/40'
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className={`label ${accent ? 'text-accent' : 'text-slate-400'}`}>{title}</span>
+        <span className="num text-xs text-slate-500">{charger.distanceKm} km</span>
+      </div>
+      <div className="text-sm text-slate-200 mt-1 truncate" title={charger.name}>
+        {charger.name}
+      </div>
+      <div className={`num text-lg mt-0.5 ${rate ? rateClass(rate) : 'text-slate-600'}`}>
+        {rate ? `LKR ${amount(rate)}` : 'rate unknown'}
+        {rate && <span className="text-xs text-slate-500"> /kWh</span>}
+      </div>
+    </div>
+  );
+}
+
 /* Cheap → expensive, so the map is readable at a glance. */
 function rateColour(rate) {
   if (rate === null || rate === undefined) return '#64748b';
   if (rate <= 60) return '#4ade80';
   if (rate <= 90) return '#fbbf24';
   return '#f87171';
+}
+/** Background chip for the per-row rate, same cheap→expensive scale. */
+function rateChip(rate) {
+  if (rate <= 60) return 'border-accent/40 bg-accent/10 text-accent';
+  if (rate <= 90) return 'border-warn/40 bg-warn/10 text-warn';
+  return 'border-danger/40 bg-danger/10 text-danger';
 }
 function rateClass(rate) {
   if (rate <= 60) return 'text-accent';
@@ -243,16 +320,20 @@ function rateClass(rate) {
 }
 
 /** Inline SVG pin — avoids Leaflet's default icons, which 404 under Vite. */
-function pin(colour, glyph) {
+/** `ring` highlights a station: green for cheapest, light for closest. */
+function pin(colour, glyph, ring = null) {
+  const size = ring ? 34 : 26;
   return L.divIcon({
     className: '',
     html: `<div style="display:flex;align-items:center;justify-content:center;
-      width:26px;height:26px;border-radius:50%;background:${colour};
-      border:2px solid #0a0c10;font-size:13px;line-height:1;
-      box-shadow:0 1px 4px rgba(0,0,0,.5)">${glyph}</div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
-    popupAnchor: [0, -14],
+      width:${size}px;height:${size}px;border-radius:50%;background:${colour};
+      border:${ring ? `3px solid ${ring}` : '2px solid #0a0c10'};
+      font-size:${ring ? 16 : 13}px;line-height:1;
+      box-shadow:${ring ? `0 0 0 4px ${ring}40, 0 1px 6px rgba(0,0,0,.6)` : '0 1px 4px rgba(0,0,0,.5)'}"
+      >${glyph}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -(size / 2 + 2)],
   });
 }
 
