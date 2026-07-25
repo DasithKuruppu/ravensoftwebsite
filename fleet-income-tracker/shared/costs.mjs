@@ -127,6 +127,50 @@ export function costsForMonth(costs, month, usage = {}) {
   return { items, total: round2(items.reduce((sum, c) => sum + c.monthly, 0)) };
 }
 
+/**
+ * Average monthly cost across a holding period, for return-on-capital.
+ *
+ * A cost that expires is not a permanent drag. A 73,000 lease with 58
+ * instalments left, held against a ten-year horizon, really costs
+ * 73,000 × 58/120 ≈ 35,000 a month averaged over the time the car is kept.
+ * Charging the full instalment for the whole horizon would understate the
+ * return on a vehicle that is owned outright for half its life.
+ *
+ * One-off costs already incurred are excluded: they are history, not a forward
+ * commitment, and future ones cannot be predicted.
+ */
+export function levelisedMonthly(costs, month, usage = {}, horizonMonths = 60) {
+  const horizon = Math.max(1, horizonMonths);
+
+  const items = (costs || [])
+    .map((c) => {
+      const amount = Number(c.amount) || 0;
+      if (!amount) return null;
+
+      switch (c.frequency) {
+        case 'once':
+          return null;
+        case 'annual':
+          return { ...c, levelised: round2(amount / 12), months: horizon };
+        case 'daily':
+          return { ...c, levelised: round2(amount * (usage.daysDriven || 0)), months: horizon };
+        case 'perKm':
+          return { ...c, levelised: round2(amount * (usage.kmDriven || 0)), months: horizon };
+        case 'monthly':
+        default: {
+          // Only pay it for as long as it lasts, then spread across the horizon.
+          const left = remainingTerm({ ...c, date: c.date }, month);
+          const months = left === null ? horizon : Math.min(left, horizon);
+          return { ...c, levelised: round2((amount * months) / horizon), months };
+        }
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.levelised - a.levelised);
+
+  return { items, total: round2(items.reduce((sum, c) => sum + c.levelised, 0)), horizonMonths: horizon };
+}
+
 export function categoryLabel(key) {
   return COST_CATEGORIES.find((c) => c.key === key)?.label || 'Other';
 }

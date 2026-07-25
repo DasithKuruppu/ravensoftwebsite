@@ -26,7 +26,7 @@ import {
 } from '../shared/commission.mjs';
 import { store, DEFAULT_DRIVER } from './store.mjs';
 import { login, verifyToken, isOwner } from './auth.mjs';
-import { costsForMonth, COST_CATEGORIES, COST_FREQUENCIES } from '../shared/costs.mjs';
+import { costsForMonth, levelisedMonthly, COST_CATEGORIES, COST_FREQUENCIES } from '../shared/costs.mjs';
 import {
   credentials as dagpsCredentials,
   login as dagpsLogin,
@@ -173,6 +173,7 @@ async function route(method, path, event, cors) {
         capitalInvested: toNumber(body.capitalInvested) ?? current.capitalInvested ?? null,
         alternativeRatePct: toNumber(body.alternativeRatePct) ?? current.alternativeRatePct ?? 9,
         leasedPercent: clampPct(toNumber(body.leasedPercent) ?? current.leasedPercent ?? 0),
+        holdingYears: Math.min(30, Math.max(1, toNumber(body.holdingYears) ?? current.holdingYears ?? 5)),
         driverName:
           typeof body.driverName === 'string' && body.driverName.trim()
             ? body.driverName.trim().slice(0, 40)
@@ -419,13 +420,26 @@ async function buildSummary(month, auth) {
       nm.ownerProfit = round2(nm.ownerShare - nmCosts.total);
     }
 
+    // Costs averaged over how long the car will actually be kept, so a lease
+    // that ends part-way through is not charged as if it ran forever.
+    const horizonMonths = Math.round((Number(settings.holdingYears) || 5) * 12);
+    const levelised = payload.nextMonth
+      ? levelisedMonthly(await store.getCosts(), payload.nextMonth.month, {
+          daysDriven: payload.nextMonth.days,
+          kmDriven: payload.nextMonth.kmDriven,
+        }, horizonMonths)
+      : null;
+
     payload.roi = buildRoi({
       settings,
       thisMonthProfit: round2(projShare - costs.total),
-      // The fair basis: a full month on full bands. Annualising a prorated
-      // part-month exaggerates whatever it happens to show.
       nextMonthProfit: payload.nextMonth?.ownerProfit ?? null,
       nextMonthLabel: payload.nextMonth?.month ?? null,
+      // The investment view: full-month revenue against levelised costs.
+      levelisedProfit:
+        payload.nextMonth && levelised ? round2(payload.nextMonth.ownerShare - levelised.total) : null,
+      levelised,
+      horizonMonths,
     });
   }
 
@@ -889,7 +903,10 @@ function buildNextMonth({ month, settings, dailyRate, kmDriven, workedDays }) {
  * Annualising one month is noisy, so the figure is labelled as coming from this
  * month's projection rather than presented as a settled return.
  */
-function buildRoi({ settings, thisMonthProfit, nextMonthProfit, nextMonthLabel }) {
+function buildRoi({
+  settings, thisMonthProfit, nextMonthProfit, nextMonthLabel,
+  levelisedProfit, levelised, horizonMonths,
+}) {
   const capital = Number(settings.capitalInvested) || 0;
   const ratePct = Number(settings.alternativeRatePct) || 0;
   if (capital <= 0) return null;
@@ -920,6 +937,7 @@ function buildRoi({ settings, thisMonthProfit, nextMonthProfit, nextMonthLabel }
 
   const nextMonth = basis(nextMonthProfit);
   const thisMonth = basis(thisMonthProfit);
+  const overHolding = basis(levelisedProfit);
 
   return {
     capital: round2(capital),
@@ -929,9 +947,14 @@ function buildRoi({ settings, thisMonthProfit, nextMonthProfit, nextMonthLabel }
     ratePct,
     monthlyAlternative,
     nextMonthLabel,
-    // Lead on the full month; the part-month is kept for contrast only.
-    headline: nextMonth || thisMonth,
-    headlineIsNextMonth: Boolean(nextMonth),
+    horizonMonths,
+    holdingYears: Math.round((horizonMonths / 12) * 10) / 10,
+    levelised,
+    // Lead on the whole holding period — that is the investment question. The
+    // single months are kept for contrast.
+    headline: overHolding || nextMonth || thisMonth,
+    headlineBasis: overHolding ? 'holding' : nextMonth ? 'nextMonth' : 'thisMonth',
+    overHolding,
     nextMonth,
     thisMonth,
   };

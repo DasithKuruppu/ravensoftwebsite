@@ -34,6 +34,8 @@ export const DEFAULT_SETTINGS = {
   alternativeRatePct: 9,
   /** Share of the vehicle financed by lease, %. The rest is own equity. */
   leasedPercent: 0,
+  /** How long the vehicle will be run, for levelised return on capital. */
+  holdingYears: 5,
 };
 
 /**

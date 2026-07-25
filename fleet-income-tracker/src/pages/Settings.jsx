@@ -45,6 +45,7 @@ export default function Settings() {
         capitalInvested: form.capitalInvested === '' ? null : Number(form.capitalInvested),
         alternativeRatePct: Number(form.alternativeRatePct) || 0,
         leasedPercent: Number(form.leasedPercent) || 0,
+        holdingYears: Number(form.holdingYears) || 5,
         driverName: (form.driverName || '').trim() || 'Driver',
         base: Number(form.base),
         bandStart: Number(form.bandStart),
@@ -134,7 +135,7 @@ export default function Settings() {
 
         <div className="border-t border-ink-800 pt-4">
           <h3 className="label mb-3">Vehicle capital</h3>
-          <div className="grid sm:grid-cols-3 gap-3">
+          <div className="grid sm:grid-cols-4 gap-3">
             <div className="grid gap-1">
               <label className="label" htmlFor="capitalInvested">
                 What the vehicle cost (LKR)
@@ -162,6 +163,20 @@ export default function Settings() {
               />
             </div>
             <div className="grid gap-1">
+              <label className="label" htmlFor="holdingYears">
+                Years you will run it
+              </label>
+              <input
+                id="holdingYears"
+                type="number"
+                step="1"
+                min="1"
+                className="num"
+                value={form.holdingYears ?? ''}
+                onChange={(e) => setForm({ ...form, holdingYears: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-1">
               <label className="label" htmlFor="alternativeRatePct">
                 Fixed deposit rate to compare (%)
               </label>
@@ -177,7 +192,8 @@ export default function Settings() {
           </div>
           <p className="text-xs text-slate-500 mt-2">
             Used to compare what the car returns against leaving the money on deposit. Interest is
-            charged only on your own share, not the leased part.
+            charged only on your own share, not the leased part, and costs that end — the lease —
+            are averaged over the years you will run it rather than charged forever.
           </p>
         </div>
 

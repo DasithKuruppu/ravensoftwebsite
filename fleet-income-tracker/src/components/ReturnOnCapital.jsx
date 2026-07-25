@@ -4,10 +4,15 @@ import { money, amount, monthLabel } from '../format.js';
  * What the money sunk into the car is earning, against what it could earn
  * sitting in a fixed deposit.
  *
- * Led by NEXT month, not this one. The first month is short and prorated, so
- * annualising it exaggerates whatever it happens to show — here it reads −17.3%
- * against a full month's 0.1%. The part-month is kept alongside for contrast
- * rather than hidden, but it is not the headline.
+ * Led by the whole HOLDING PERIOD, because that is the investment question.
+ * Costs that expire are levelled across it: a 73,000 lease with 57 instalments
+ * left, held for ten years, really costs about 34,675 a month averaged over the
+ * time the car is kept. Charging the full instalment forever would understate
+ * the return on a vehicle owned outright for half its life — and charging none
+ * of it would flatter the early years.
+ *
+ * Single months are kept alongside for contrast: this month is short and
+ * prorated, next month is full but still carries the lease at full rate.
  *
  * This answers a different question from profit. Profit asks "am I making
  * money"; this asks "is this a better use of the capital than the obvious
@@ -30,9 +35,11 @@ export default function ReturnOnCapital({ summary }) {
 
   const h = r.headline;
   const basisLabel =
-    r.headlineIsNextMonth && r.nextMonthLabel
-      ? `${monthLabel(`${r.nextMonthLabel}-01`)} at this rate`
-      : 'this month, annualised';
+    r.headlineBasis === 'holding'
+      ? `averaged over ${r.holdingYears} years`
+      : r.headlineBasis === 'nextMonth' && r.nextMonthLabel
+        ? `${monthLabel(`${r.nextMonthLabel}-01`)} at this rate`
+        : 'this month, annualised';
   const tone = h.beatsAlternative ? 'text-accent' : 'text-danger';
 
   return (
@@ -79,6 +86,14 @@ export default function ReturnOnCapital({ summary }) {
           value={amount(h.annualisedProfit)}
           tone={h.annualisedProfit < 0 ? 'text-danger' : 'text-slate-200'}
         />
+        {r.levelised && (
+          <Row
+            label="Running costs, levelled"
+            hint={`per month across ${r.holdingYears} years`}
+            value={`− ${amount(r.levelised.total)}`}
+            tone="text-warn"
+          />
+        )}
         <Row
           label="Interest given up"
           hint="not cash — what your own money could have earned"
@@ -96,14 +111,44 @@ export default function ReturnOnCapital({ summary }) {
         </div>
       </dl>
 
-      {/* The part-month, for contrast — shown but not led on. */}
-      {r.headlineIsNextMonth && r.thisMonth && (
-        <p className="text-xs text-slate-600 mt-3">
-          This month, being partial and prorated, annualises to{' '}
-          <span className="num">{r.thisMonth.returnPct}%</span> — which is why it is not the basis
-          here.
-        </p>
+      {/* Expiring costs, so the levelling is visible rather than magic. */}
+      {r.levelised && (
+        <div className="mt-3 pt-3 border-t border-ink-800">
+          <div className="label mb-2">Costs that end</div>
+          {r.levelised.items.filter((i) => i.months < r.horizonMonths).length === 0 ? (
+            <p className="text-xs text-slate-600">
+              None — every cost runs for the whole {r.holdingYears} years.
+            </p>
+          ) : (
+            r.levelised.items
+              .filter((i) => i.months < r.horizonMonths)
+              .map((i) => (
+                <p key={i.id} className="text-xs text-slate-500">
+                  {i.label}: <span className="num">{amount(i.amount)}</span>/month for{' '}
+                  <span className="num">{i.months}</span> more months — counted as{' '}
+                  <span className="num text-slate-300">{amount(i.levelised)}</span>/month across the{' '}
+                  {r.holdingYears} years.
+                </p>
+              ))
+          )}
+        </div>
       )}
+
+      {/* Single months, for contrast — shown but not led on. */}
+      <p className="text-xs text-slate-600 mt-3">
+        {r.nextMonth && (
+          <>
+            Next month alone, still paying the full instalment, returns{' '}
+            <span className="num">{r.nextMonth.returnPct}%</span>.{' '}
+          </>
+        )}
+        {r.thisMonth && (
+          <>
+            This month, partial and prorated, annualises to{' '}
+            <span className="num">{r.thisMonth.returnPct}%</span>.
+          </>
+        )}
+      </p>
 
       {r.leasedPct > 0 && (
         <p className="text-xs text-slate-500 mt-2">
@@ -114,8 +159,8 @@ export default function ReturnOnCapital({ summary }) {
 
       <p className="text-xs text-slate-500 mt-2">
         {h.beatsAlternative
-          ? `A full month at this rate beats a ${r.ratePct}% deposit.`
-          : `On a full month at this rate the capital would still earn more in a ${r.ratePct}% deposit.`}
+          ? `Over ${r.holdingYears} years at this rate the car beats a ${r.ratePct}% deposit.`
+          : `Over ${r.holdingYears} years at this rate the capital would still earn more in a ${r.ratePct}% deposit.`}
       </p>
     </div>
   );
