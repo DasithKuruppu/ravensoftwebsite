@@ -1,0 +1,25 @@
+import { monthLabel, shiftMonth, currentMonth } from '../format.js';
+
+export default function MonthNav({ month, setMonth, right = null }) {
+  return (
+    <div className="flex items-center gap-3 mb-5 flex-wrap">
+      <div className="flex items-center gap-1">
+        <button className="btn px-2.5" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">
+          ‹
+        </button>
+        <span className="num text-base text-slate-100 min-w-[10rem] text-center">
+          {monthLabel(month)}
+        </span>
+        <button className="btn px-2.5" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month">
+          ›
+        </button>
+      </div>
+      {month !== currentMonth() && (
+        <button className="btn text-xs" onClick={() => setMonth(currentMonth())}>
+          Today
+        </button>
+      )}
+      {right && <div className="ml-auto">{right}</div>}
+    </div>
+  );
+}

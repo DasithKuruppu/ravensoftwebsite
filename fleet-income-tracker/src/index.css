@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-ink-950 text-slate-200;
+  }
+  /* Figures line up in columns — every number in the UI is tabular. */
+  .num {
+    @apply font-mono tabular-nums;
+    font-variant-numeric: tabular-nums;
+  }
+  input,
+  select {
+    @apply bg-ink-900 border border-ink-700 rounded-md px-3 py-2 text-slate-100
+           outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/30;
+  }
+  input[type='file'] {
+    @apply py-1.5 text-sm file:mr-3 file:rounded file:border-0 file:bg-ink-700
+           file:px-3 file:py-1.5 file:text-slate-200;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-ink-900 border border-ink-800 rounded-xl p-5;
+  }
+  .label {
+    @apply text-xs uppercase tracking-wider text-slate-500;
+  }
+  .btn {
+    @apply px-3 py-2 rounded-md text-sm font-medium transition-colors
+           bg-ink-800 hover:bg-ink-700 border border-ink-700 disabled:opacity-40
+           disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-accent-dim hover:bg-accent text-ink-950 border-transparent font-semibold;
+  }
+  .btn-danger {
+    @apply text-danger hover:bg-danger/10 border-danger/30;
+  }
+  .th {
+    @apply text-left text-xs uppercase tracking-wider text-slate-500 font-medium px-3 py-2;
+  }
+  .td {
+    @apply px-3 py-2 border-t border-ink-800;
+  }
+}

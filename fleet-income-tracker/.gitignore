@@ -1,0 +1,14 @@
+# Uber exports contain the driver's name, email and phone. This repo is public.
+data/
+*.csv
+
+node_modules/
+dist/
+.local/
+.env
+.env.local
+infra/node_modules/
+infra/cdk.out/
+infra/cdk-outputs.json
+.DS_Store
+*.log
