@@ -65,10 +65,6 @@ export default function Dashboard({ month, setMonth, isOwner }) {
             bandEnd={summary.plan.bandEnd}
           />
 
-          {/* Shown to both roles — the driver can see the same position the
-              owner does, rather than being tracked one-way. */}
-          <VehicleMap />
-
           <div className="grid md:grid-cols-2 gap-5">
             <CashSplit summary={summary} />
 
@@ -124,6 +120,13 @@ export default function Dashboard({ month, setMonth, isOwner }) {
               )}
             </div>
           </div>
+
+          {/* Last on the page: the money figures are what the dashboard is for,
+              and the map is the tallest block — putting it above them pushed
+              everything else below the fold.
+              Shown to both roles — the driver sees the same position the owner
+              does, rather than being tracked one-way. */}
+          <VehicleMap />
         </div>
       )}
     </div>

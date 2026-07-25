@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { amount, count, dayLabel, todayLocal } from '../format.js';
 import MonthNav from '../components/MonthNav.jsx';
 import CsvImport from '../components/CsvImport.jsx';
+import Spinner, { Refreshing } from '../components/Spinner.jsx';
 
 const EMPTY = { date: '', revenue: '', trips: '', uberKm: '', gpsKm: '', cashCollected: '' };
 
@@ -12,18 +13,30 @@ export default function DailyLog({ month, setMonth, isOwner }) {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
   const [settings, setSettings] = useState(null);
+  // `loading` is the first fetch for a month; `busy` is a refresh over data we
+  // already have, which dims in place rather than blanking the table.
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await api.entries(month);
-      setEntries(res.entries);
-      setError('');
-    } catch (e) {
-      setError(e.message);
-    }
-  }, [month]);
+  const load = useCallback(
+    async ({ silent = false } = {}) => {
+      if (silent) setBusy(true);
+      try {
+        const res = await api.entries(month);
+        setEntries(res.entries);
+        setError('');
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+        setBusy(false);
+      }
+    },
+    [month],
+  );
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [load]);
 
@@ -47,7 +60,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
       });
       setForm({ ...EMPTY, date: todayLocal() });
       setEditing(null);
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err.message);
     }
@@ -61,7 +74,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
         setEditing(null);
         setForm({ ...EMPTY, date: todayLocal() });
       }
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err.message);
     }
@@ -125,7 +138,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
             savedMapping={settings?.csvMapping}
             canSaveMapping={isOwner}
             onSaveMapping={(csvMapping) => api.saveSettings({ ...settings, csvMapping })}
-            onImported={load}
+            onImported={() => load({ silent: true })}
           />
         </div>
 
@@ -133,16 +146,25 @@ export default function DailyLog({ month, setMonth, isOwner }) {
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="label">Entries</h2>
             <span className="text-xs text-slate-500">
-              <span className="num">{count(entries.length)}</span> days ·{' '}
-              <span className="num text-slate-300">{amount(total)}</span>
+              {loading ? (
+                'loading…'
+              ) : (
+                <>
+                  <span className="num">{count(entries.length)}</span> days ·{' '}
+                  <span className="num text-slate-300">{amount(total)}</span>
+                </>
+              )}
             </span>
           </div>
 
-          {entries.length === 0 ? (
+          {loading ? (
+            <Spinner label="Loading entries…" />
+          ) : entries.length === 0 ? (
             <p className="text-sm text-slate-500 py-6 text-center">
               No entries this month yet. Add one, or import a CSV.
             </p>
           ) : (
+            <Refreshing active={busy}>
             <table className="w-full text-sm min-w-[40rem]">
               <thead>
                 <tr>
@@ -187,6 +209,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
                 ))}
               </tbody>
             </table>
+            </Refreshing>
           )}
         </div>
       </div>
