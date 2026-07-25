@@ -333,6 +333,7 @@ async function buildSummary(month, auth) {
     revenue,
     projectedRevenue,
     yesterday: yesterdayRevenue(entries),
+    today: dayRevenue(entries, todayInColombo()),
   });
 
   const payload = {
@@ -719,28 +720,39 @@ function dayRevenue(entries, date) {
  * the REMAINING days now need to make up the shortfall. The second is the
  * honest one once he is behind, and it climbs as the month runs out.
  */
-function buildPush({
+export function buildPush({
   settings, factor, revenue, trips, projectedRevenue, dailyAverage,
   elapsedDays, operatingTotal, remainingWorkDays, projectedPay,
 }) {
   const plan = prorate(settings, factor);
   const daysLeft = remainingWorkDays;
 
-  // Which threshold is next, judged on the projection rather than today's
-  // total — the question is where the month is heading.
+  // Two different questions, and they take two different numbers. What is
+  // worth chasing depends on where the month is HEADING — chasing a threshold
+  // the projection already clears is pointless. Whether a tier has actually
+  // been reached depends on where it STANDS: a tier is reached when the money
+  // is earned, not when a forecast says it will be.
+  //
+  // Collapsing the two is what made the card announce "top tier reached" on a
+  // month sitting at 51k against a 116k threshold.
+  const reached = revenue >= plan.bandEnd;
+  const onTrack = !reached && projectedRevenue >= plan.bandEnd;
+
   let target = null;
   let tier = null;
   if (projectedRevenue < plan.bandStart) {
     target = plan.bandStart;
     tier = 'band';
-  } else if (projectedRevenue < plan.bandEnd) {
+  } else if (projectedRevenue < plan.bandEnd || onTrack) {
     target = plan.bandEnd;
     tier = 'top';
   }
 
-  // What one more rupee is worth right now, and after the next threshold.
+  // What one more rupee is worth RIGHT NOW — so this reads off revenue banked,
+  // not the projection. Below the band the honest answer today is nothing
+  // extra, however the month is forecast to finish.
   const marginalNow =
-    projectedRevenue < plan.bandStart ? 0 : projectedRevenue < plan.bandEnd ? settings.bandRate : settings.topRate;
+    revenue < plan.bandStart ? 0 : revenue < plan.bandEnd ? settings.bandRate : settings.topRate;
   const marginalNext = tier === 'band' ? settings.bandRate : tier === 'top' ? settings.topRate : null;
 
   const base = {
@@ -755,10 +767,12 @@ function buildPush({
     revenuePerTrip: trips > 0 ? round2(revenue / trips) : null,
     tripsPerDay: trips > 0 && elapsedDays > 0 ? Math.round((trips / elapsedDays) * 10) / 10 : null,
     daysLeft,
+    revenue: round2(revenue),
+    projectedRevenue: round2(projectedRevenue),
   };
 
-  // Already in the top tier — nothing to chase, so say what he is earning.
-  if (!target) return { ...base, reached: true };
+  // Actually past the top threshold — the only state that may claim it.
+  if (!target) return { ...base, reached: true, onTrack: false };
 
   const payAtTarget = calculatePay(target, settings, factor).total;
   const catchUpDaily = daysLeft > 0 ? (target - revenue) / daysLeft : null;
@@ -767,8 +781,14 @@ function buildPush({
   return {
     ...base,
     reached: false,
+    // Heading past the threshold but not there yet: a pace to hold rather than
+    // a shortfall to make up, and nothing to congratulate him for yet.
+    onTrack,
     target: round2(target),
     gap: round2(Math.max(0, target - projectedRevenue)),
+    // What is still to be EARNED, which is the number that decides the tier —
+    // unlike `gap`, this does not go to zero just because the forecast is good.
+    remainingToTarget: round2(Math.max(0, target - revenue)),
     dailyNeeded: round2(target / operatingTotal),
     catchUpDaily: catchUpDaily === null ? null : round2(catchUpDaily),
     extraPerDay: extraPerDay === null ? null : round2(extraPerDay),
@@ -798,7 +818,7 @@ function buildPush({
  */
 function buildSeries({
   entries, settings, factor, daysInMonth, elapsedDays, operatingTotal, revenue, projectedRevenue,
-  yesterday,
+  yesterday, today: todayEntry,
 }) {
   if (!operatingTotal) return { actual: [], scenarios: [] };
 
@@ -832,14 +852,35 @@ function buildSeries({
     return pts;
   };
 
+  // Three paces, because "how am I doing" has three defensible answers and they
+  // disagree — which is the useful part. The average is the steadiest but is
+  // dragged down by slow days; yesterday is the last complete day; today is the
+  // freshest but is still being driven, so it reads low until the shift ends.
   const scenarios = [
-    { key: 'current', label: 'current pace', endRevenue: round2(projectedRevenue), points: daysLeft > 0 ? tail(projectedRevenue) : [] },
+    { key: 'current', label: 'average pace', endRevenue: round2(projectedRevenue), points: daysLeft > 0 ? tail(projectedRevenue) : [] },
   ];
+
+  // Today repeated to month end. Deliberately placed before yesterday: it is
+  // the most recent signal, and on a finished shift it is the best one. Off
+  // days are excluded — a projection built on a day he did not work says
+  // nothing about his pace.
+  if (todayEntry && todayEntry.revenue > 0 && !todayEntry.offDay && daysLeft > 0) {
+    const endRevenue = today.revenue + todayEntry.revenue * daysLeft;
+    scenarios.push({
+      key: 'today',
+      label: "today's pace",
+      endRevenue: round2(endRevenue),
+      points: tail(endRevenue),
+      // Flagged so the chart can say this one is still moving, rather than
+      // presenting a half-finished day as a settled result.
+      partial: true,
+    });
+  }
 
   // Yesterday repeated to month end. The month average is dragged down by slow
   // days and by today, which is still being driven; yesterday is a complete
   // day and shows what the month looks like if that effort holds.
-  if (yesterday && yesterday.revenue > 0 && daysLeft > 0) {
+  if (yesterday && yesterday.revenue > 0 && !yesterday.offDay && daysLeft > 0) {
     const endRevenue = today.revenue + yesterday.revenue * daysLeft;
     scenarios.push({
       key: 'yesterday',
@@ -858,6 +899,10 @@ function buildSeries({
 
   for (const sc of scenarios) {
     sc.endPay = sc.points.length ? sc.points[sc.points.length - 1].pay : today.pay;
+    // The pace the finish assumes: what the remaining days each have to bring
+    // in. This is the figure a driver can act on — an end-of-month total is an
+    // abstraction, "13,500 a day" is a shift.
+    sc.dailyRate = daysLeft > 0 ? round2((sc.endRevenue - today.revenue) / daysLeft) : null;
     // The share of that month's revenue the driver ends up keeping. Not the
     // tier rate — the effective rate across the whole month, which is what
     // "my commission" actually means to him.

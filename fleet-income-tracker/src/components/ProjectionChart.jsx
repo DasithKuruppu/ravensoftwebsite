@@ -12,16 +12,22 @@ import { amount, money } from '../format.js';
  * plan pays nothing extra below it. That divergence is the argument for pushing:
  * the gap between the line ends is the money at stake.
  *
- * Colours are the validated categorical pair for this dark surface (#141821):
- * aqua #199e70 and blue #3987e5 — checked for lightness band, chroma floor,
- * all-pairs CVD separation (worst ΔE 19.6 under deuteranopia) and contrast.
+ * Colours are the validated categorical set for this dark surface (#141821):
+ * aqua #199e70, blue #3987e5, orange #d95926 and mauve #a855a8 — checked for
+ * lightness band, chroma floor, ALL-PAIRS CVD separation (worst ΔE 9.4 under
+ * deuteranopia, 19.0 normal vision) and contrast. All four lines share one
+ * plot, so adjacent-pair checking is not enough; purple was the obvious fourth
+ * hue and failed against the blue at ΔE 4.1.
+ *
  * The app's own accent green fails the lightness band as a chart mark here.
  */
 const ACTUAL = '#199e70';
 const STRETCH = '#3987e5';
 const YESTERDAY = '#d95926';
+const TODAY = '#a855a8';
 
-const COLOUR = { current: ACTUAL, yesterday: YESTERDAY, stretch: STRETCH };
+const COLOUR = { current: ACTUAL, today: TODAY, yesterday: YESTERDAY, stretch: STRETCH };
+const DASH = { current: '5 4', today: '1 3', yesterday: '2 3', stretch: '8 4' };
 
 const PAD = { top: 22, right: 16, bottom: 26, left: 62 };
 const HEIGHT = 230;
@@ -76,7 +82,7 @@ export default function ProjectionChart({ summary }) {
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
         <h2 className="label">{driverName || 'Driver'} take-home this month</h2>
         <span className="flex items-center gap-3 text-xs text-slate-400">
-          <Key colour={ACTUAL} label="so far / current pace" />
+          <Key colour={ACTUAL} label="so far / average pace" />
           {drawable
             .filter((sc) => sc.key !== 'current')
             .map((sc) => (
@@ -85,7 +91,8 @@ export default function ProjectionChart({ summary }) {
         </span>
       </div>
       <p className="text-xs text-slate-500 mb-2">
-        Solid to today, dashed for the rest of the month
+        Solid to today, dashed for the rest of the month. Today's pace counts only the
+        hours driven so far, so it climbs as the shift goes on.
       </p>
 
       <div ref={wrapRef} className="w-full">
@@ -121,7 +128,7 @@ export default function ProjectionChart({ summary }) {
               fill="none"
               stroke={COLOUR[sc.key]}
               strokeWidth="2"
-              strokeDasharray={sc.key === 'current' ? '5 4' : sc.key === 'yesterday' ? '2 3' : '8 4'}
+              strokeDasharray={DASH[sc.key] || '8 4'}
               strokeLinecap="round"
               opacity="0.95"
             />
@@ -224,9 +231,12 @@ function Key({ colour, label, dashed }) {
 }
 
 /**
- * A finish: what he takes home, on what revenue, and what share that is.
- * The percentage matters as much as the amount — it is the answer to "what is
- * my commission", and it rises with the tier rather than being one number.
+ * A finish: what he takes home, and the daily earning rate that gets him there.
+ *
+ * The rate rather than the share of revenue, because the rate is the thing he
+ * can act on — "37% of 350,000" describes an outcome, "13,500 a day" describes
+ * a shift, and the whole point of showing three paces side by side is to
+ * compare the daily numbers.
  */
 function Val({ colour, label, value, sc }) {
   const pay = sc ? sc.endPay : value;
@@ -236,10 +246,9 @@ function Val({ colour, label, value, sc }) {
       <span className="inline-block w-3 h-[3px] rounded-sm" style={{ background: colour }} />
       <span className="text-slate-500">{label}</span>
       <span className="num text-slate-200">{amount(pay)}</span>
-      {sc && sc.effectiveRate !== null && (
+      {sc && sc.dailyRate !== null && sc.dailyRate !== undefined && (
         <span className="text-slate-500">
-          = <span className="num">{sc.effectiveRate}%</span> of{' '}
-          <span className="num">{amount(sc.endRevenue)}</span>
+          at <span className="num">{amount(sc.dailyRate)}</span>/day
         </span>
       )}
     </span>

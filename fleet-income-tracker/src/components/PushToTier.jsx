@@ -36,7 +36,17 @@ export default function PushToTier({ summary }) {
   }
 
   const goingForTop = p.tier === 'top';
-  const title = goingForTop ? 'Push to tier 3' : 'Unlock tier 2';
+  // On track is not the same as arrived. The pace forecasts a finish past the
+  // threshold, but the money is not earned yet and the higher rate is not being
+  // paid yet, so this state encourages holding the pace rather than
+  // congratulating him for a tier he has not reached.
+  const title = p.onTrack
+    ? goingForTop
+      ? 'On track for tier 3'
+      : 'On track for tier 2'
+    : goingForTop
+      ? 'Push to tier 3'
+      : 'Unlock tier 2';
 
   return (
     <div className="card border border-accent/30">
@@ -47,6 +57,28 @@ export default function PushToTier({ summary }) {
         </span>
       </div>
 
+      {/* On track: a pace to hold, not a shortfall to make up. */}
+      {p.onTrack ? (
+        <>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="num text-2xl text-accent">{amount(p.catchUpDaily || 0)}</span>
+            <span className="text-slate-300">a day keeps you there</span>
+            <span className="text-slate-500 text-sm">
+              — over the last <span className="num">{p.daysLeft}</span> day
+              {p.daysLeft === 1 ? '' : 's'}, to finish on{' '}
+              <span className="num">{amount(p.target)}</span>
+            </span>
+          </div>
+          <p className="text-sm text-slate-300 mt-3">
+            Not banked yet: you are on <span className="num">{amount(p.revenue)}</span>, so there
+            is still <span className="num text-accent">{amount(p.remainingToTarget)}</span> to
+            earn before you cross{' '}
+            <span className="num">{amount(p.bandEnd)}</span> and start keeping{' '}
+            <span className="num text-accent">{Math.round(p.topRate * 100)}%</span>.
+          </p>
+        </>
+      ) : (
+      <>
       {/* The ask, in the unit he controls. */}
       <div className="flex items-baseline gap-2 flex-wrap">
         {p.extraTripsPerDay >= 1 ? (
@@ -89,6 +121,8 @@ export default function PushToTier({ summary }) {
           </>
         )}
       </p>
+      </>
+      )}
 
       {/* Why it is worth it: what the next rupee earns, now and after. */}
       <div className="mt-4">
@@ -127,7 +161,8 @@ export default function PushToTier({ summary }) {
             </>
           ) : (
             <>
-              <span className="num">{amount(p.gap)}</span> more this month and you start keeping{' '}
+              <span className="num">{amount(p.onTrack ? p.remainingToTarget : p.gap)}</span> more
+              this month and you start keeping{' '}
               <span className="text-warn">{Math.round(p.bandRate * 100)}%</span> of everything
               above it.
             </>
