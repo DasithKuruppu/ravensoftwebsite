@@ -28,6 +28,10 @@ export const DEFAULT_SETTINGS = {
    * not in source control.
    */
   driverName: 'Driver',
+  /** What the vehicle cost, for return-on-capital. null = not recorded. */
+  capitalInvested: null,
+  /** The alternative the capital could have earned, annual %. */
+  alternativeRatePct: 9,
 };
 
 /**

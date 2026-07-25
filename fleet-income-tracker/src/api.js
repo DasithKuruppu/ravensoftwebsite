@@ -78,6 +78,8 @@ export const api = {
   saveSettings: (settings) => request('PUT', '/settings', settings),
   validate: (month) => request('GET', `/validate?month=${month}`),
   location: () => request('GET', '/location'),
+  costs: () => request('GET', '/costs'),
+  saveCosts: (costs) => request('PUT', '/costs', { costs }),
   chargers: () => request('GET', '/chargers'),
   saveChargers: (chargers) => request('PUT', '/chargers', { chargers }),
 };

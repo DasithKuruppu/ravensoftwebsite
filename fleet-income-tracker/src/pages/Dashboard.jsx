@@ -7,6 +7,8 @@ import VehicleMap from '../components/VehicleMap.jsx';
 import CashSplit from '../components/CashSplit.jsx';
 import ProjectionChart from '../components/ProjectionChart.jsx';
 import PushToTier from '../components/PushToTier.jsx';
+import RunningCosts from '../components/RunningCosts.jsx';
+import ReturnOnCapital from '../components/ReturnOnCapital.jsx';
 
 export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
   const [summary, setSummary] = useState(null);
@@ -90,6 +92,14 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
           <PushToTier summary={summary} />
 
           <ProjectionChart summary={summary} />
+
+          {/* Owner-only; the API omits these fields for a driver token. */}
+          {isOwner && summary.costs && (
+            <div className="grid md:grid-cols-2 gap-5">
+              <RunningCosts summary={summary} />
+              <ReturnOnCapital summary={summary} />
+            </div>
+          )}
 
           <div className="grid md:grid-cols-2 gap-5">
             <CashSplit summary={summary} />

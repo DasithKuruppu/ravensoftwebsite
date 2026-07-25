@@ -26,6 +26,7 @@ import {
 } from '../shared/commission.mjs';
 import { store, DEFAULT_DRIVER } from './store.mjs';
 import { login, verifyToken, isOwner } from './auth.mjs';
+import { costsForMonth, COST_CATEGORIES, COST_FREQUENCIES } from '../shared/costs.mjs';
 import {
   credentials as dagpsCredentials,
   login as dagpsLogin,
@@ -169,6 +170,8 @@ async function route(method, path, event, cors) {
             : /^\d{4}-\d{2}-\d{2}$/.test(body.startDate || '')
               ? body.startDate
               : null,
+        capitalInvested: toNumber(body.capitalInvested) ?? current.capitalInvested ?? null,
+        alternativeRatePct: toNumber(body.alternativeRatePct) ?? current.alternativeRatePct ?? 9,
         driverName:
           typeof body.driverName === 'string' && body.driverName.trim()
             ? body.driverName.trim().slice(0, 40)
@@ -179,6 +182,18 @@ async function route(method, path, event, cors) {
         return json(400, { error: 'invalid_settings', message: 'bandEnd must be greater than bandStart' }, cors);
       }
       return json(200, await store.putSettings(DRIVER_ID, next), cors);
+    }
+  }
+
+  // Running costs are the owner's ledger — the driver never sees them, and the
+  // route refuses him outright rather than the UI merely hiding a tab.
+  if (path === '/costs') {
+    if (!isOwner(auth)) return json(403, { error: 'forbidden', message: 'Running costs are owner-only' }, cors);
+    if (method === 'GET') return json(200, { costs: await store.getCosts() }, cors);
+    if (method === 'PUT') {
+      const list = Array.isArray(body.costs) ? body.costs.map(cleanCost).filter(Boolean) : null;
+      if (!list) return json(400, { error: 'invalid_costs', message: 'costs must be an array' }, cors);
+      return json(200, { costs: await store.putCosts(list) }, cors);
     }
   }
 
@@ -358,10 +373,20 @@ async function buildSummary(month, auth) {
     plan: { bandStart: effectivePlan.bandStart, bandEnd: effectivePlan.bandEnd, base: effectivePlan.base },
   };
 
-  // Owner-share figures are withheld from driver tokens at the API level.
+  // Owner-share figures and the cost ledger are withheld from driver tokens at
+  // the API level — they are absent from his payload, not hidden in his UI.
   if (isOwner(auth)) {
-    payload.ownerShare = ownerShare(revenue, settings, factor);
-    payload.projectedOwnerShare = ownerShare(projectedRevenue, settings, factor);
+    const share = ownerShare(revenue, settings, factor);
+    const projShare = ownerShare(projectedRevenue, settings, factor);
+    const costs = costsForMonth(await store.getCosts(), month);
+
+    payload.ownerShare = share;
+    payload.projectedOwnerShare = projShare;
+    payload.costs = costs;
+    // What is actually left after paying the driver and running the car.
+    payload.ownerProfit = round2(share - costs.total);
+    payload.projectedOwnerProfit = round2(projShare - costs.total);
+    payload.roi = buildRoi({ settings, projectedProfit: round2(projShare - costs.total) });
   }
 
   return payload;
@@ -773,6 +798,56 @@ function haversineKm(aLat, aLng, bLat, bLng) {
   const s =
     Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+/**
+ * Return on the capital tied up in the car, against what it could have earned
+ * elsewhere.
+ *
+ * The opportunity cost is deliberately NOT folded into running costs. Those are
+ * cash leaving the account; forgone interest is not, and mixing them would make
+ * the profit figure wrong for cash-flow purposes. It is shown as its own line,
+ * turning accounting profit ("am I making money") into economic profit ("is
+ * this better than the alternative") without conflating the two.
+ *
+ * Annualising one month is noisy, so the figure is labelled as coming from this
+ * month's projection rather than presented as a settled return.
+ */
+function buildRoi({ settings, projectedProfit }) {
+  const capital = Number(settings.capitalInvested) || 0;
+  const ratePct = Number(settings.alternativeRatePct) || 0;
+  if (capital <= 0) return null;
+
+  const monthlyAlternative = round2((capital * (ratePct / 100)) / 12);
+  const annualisedProfit = round2(projectedProfit * 12);
+
+  return {
+    capital: round2(capital),
+    ratePct,
+    monthlyAlternative,
+    annualisedProfit,
+    // Return the car earns on the money sunk into it, annualised.
+    annualisedReturnPct: Math.round((annualisedProfit / capital) * 1000) / 10,
+    // What is left after charging the capital its alternative return.
+    economicProfit: round2(projectedProfit - monthlyAlternative),
+  };
+}
+
+/** Normalise a cost line before storing it. */
+function cleanCost(c) {
+  const amount = toNumber(c?.amount);
+  if (amount === undefined || amount < 0) return null;
+  const frequency = COST_FREQUENCIES.some((f) => f.key === c.frequency) ? c.frequency : 'monthly';
+  return {
+    id: String(c.id || `cost-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+    label: String(c.label || 'Cost').slice(0, 60),
+    category: COST_CATEGORIES.some((x) => x.key === c.category) ? c.category : 'other',
+    frequency,
+    amount: round2(amount),
+    // A one-off needs its date; a recurring cost may carry a start date so it
+    // does not apply to months before it existed.
+    date: /^\d{4}-\d{2}-\d{2}$/.test(c.date || '') ? c.date : null,
+  };
 }
 
 /**

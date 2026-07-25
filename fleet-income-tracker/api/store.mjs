@@ -15,6 +15,7 @@
  */
 import { DEFAULT_SETTINGS } from '../shared/commission.mjs';
 import { DEFAULT_CHARGERS } from '../shared/chargers.mjs';
+import { DEFAULT_COSTS } from '../shared/costs.mjs';
 
 const TABLE = process.env.TABLE_NAME || 'fleet-tracker';
 const MODE = process.env.STORE || (process.env.DDB_ENDPOINT ? 'ddb' : 'memory');
@@ -29,6 +30,8 @@ const CONFIG_PK = 'CONFIG';
 const CHARGERS_SK = 'CHARGERS';
 // Previous GPS fix, kept so speed can be derived across Lambda cold starts.
 const LASTFIX_SK = 'LASTFIX';
+// The owner's running costs. Never returned on a driver request.
+const COSTS_SK = 'COSTS';
 
 /* ────────────────────────────── DynamoDB ────────────────────────────── */
 
@@ -139,6 +142,24 @@ const ddbImpl = {
     return list;
   },
 
+  async getCosts() {
+    const { GetCommand } = await import('@aws-sdk/lib-dynamodb');
+    const client = await ddb();
+    const res = await client.send(
+      new GetCommand({ TableName: TABLE, Key: { pk: CONFIG_PK, sk: COSTS_SK } }),
+    );
+    return res.Item?.list?.length ? res.Item.list : DEFAULT_COSTS;
+  },
+
+  async putCosts(list) {
+    const { PutCommand } = await import('@aws-sdk/lib-dynamodb');
+    const client = await ddb();
+    await client.send(
+      new PutCommand({ TableName: TABLE, Item: { pk: CONFIG_PK, sk: COSTS_SK, list, updatedAt: new Date().toISOString() } }),
+    );
+    return list;
+  },
+
   async getLastFix() {
     const { GetCommand } = await import('@aws-sdk/lib-dynamodb');
     const client = await ddb();
@@ -232,6 +253,18 @@ const memImpl = {
     const db = readAll();
     db[CONFIG_PK] = db[CONFIG_PK] || {};
     db[CONFIG_PK][CHARGERS_SK] = { list, updatedAt: new Date().toISOString() };
+    writeAll(db);
+    return list;
+  },
+  async getCosts() {
+    const db = readAll();
+    const item = (db[CONFIG_PK] || {})[COSTS_SK];
+    return item?.list?.length ? item.list : DEFAULT_COSTS;
+  },
+  async putCosts(list) {
+    const db = readAll();
+    db[CONFIG_PK] = db[CONFIG_PK] || {};
+    db[CONFIG_PK][COSTS_SK] = { list, updatedAt: new Date().toISOString() };
     writeAll(db);
     return list;
   },

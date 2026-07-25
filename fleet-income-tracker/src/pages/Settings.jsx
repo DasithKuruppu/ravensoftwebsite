@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { calculatePay } from '../../shared/commission.mjs';
 import { money, amount } from '../format.js';
 import ChargerEditor from '../components/ChargerEditor.jsx';
+import CostEditor from '../components/CostEditor.jsx';
 
 const CHECK_REVENUE = 406789.2;
 const CHECK_EXPECTED = 121394.6;
@@ -41,6 +42,8 @@ export default function Settings() {
       const next = await api.saveSettings({
         ...form,
         startDate: form.startDate || null,
+        capitalInvested: form.capitalInvested === '' ? null : Number(form.capitalInvested),
+        alternativeRatePct: Number(form.alternativeRatePct) || 0,
         driverName: (form.driverName || '').trim() || 'Driver',
         base: Number(form.base),
         bandStart: Number(form.bandStart),
@@ -170,6 +173,45 @@ export default function Settings() {
           ))}
         </dl>
       </div>
+
+      {/* Capital, for the return-on-capital comparison. */}
+      <div className="card">
+        <h2 className="label mb-3">Vehicle capital</h2>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid gap-1">
+            <label className="label" htmlFor="capitalInvested">
+              What the vehicle cost (LKR)
+            </label>
+            <input
+              id="capitalInvested"
+              type="number"
+              step="10000"
+              className="num"
+              value={form.capitalInvested ?? ''}
+              onChange={(e) => setForm({ ...form, capitalInvested: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-1">
+            <label className="label" htmlFor="alternativeRatePct">
+              Fixed deposit rate to compare against (%)
+            </label>
+            <input
+              id="alternativeRatePct"
+              type="number"
+              step="0.5"
+              className="num"
+              value={form.alternativeRatePct ?? ''}
+              onChange={(e) => setForm({ ...form, alternativeRatePct: e.target.value })}
+            />
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mt-2">
+          Used to compare what the car returns against leaving the money on deposit. Saved with the
+          plan above.
+        </p>
+      </div>
+
+      <CostEditor />
 
       <ChargerEditor />
 
