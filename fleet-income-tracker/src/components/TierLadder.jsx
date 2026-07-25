@@ -31,10 +31,14 @@ export default function TierLadder({ revenue, projected, bandStart, bandEnd }) {
           <div className="flex-1 bg-accent/10" />
         </div>
 
-        {/* month-to-date fill: a solid bar across the lower half of the track */}
+        {/* Month-to-date fill: full height, so it reads as one bar rather than a
+            thinner strip sitting inside the zones. It lightens neutrally rather
+            than painting green over the top, which keeps each zone's own colour
+            legible underneath while still showing clearly how far along we are. */}
         <div
           style={{ width: x(revenue) }}
-          className="absolute bottom-0 left-0 h-6 bg-accent/70 border-r-2 border-accent
+          className="absolute inset-y-0 left-0 bg-white/[0.18] border-r-2 border-accent
+                     shadow-[inset_0_0_0_1px_rgba(74,222,128,0.25)]
                      transition-[width] duration-500"
         />
 
@@ -56,7 +60,7 @@ export default function TierLadder({ revenue, projected, bandStart, bandEnd }) {
       </div>
 
       <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-xs text-slate-400">
-        <Legend className="bg-accent/70 border border-accent">
+        <Legend className="bg-white/[0.18] border border-accent">
           MTD <span className="num text-slate-200">{amount(revenue)}</span>
         </Legend>
         <Legend className="border-l-2 border-dashed border-slate-100">
