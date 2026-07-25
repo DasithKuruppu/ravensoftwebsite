@@ -8,6 +8,13 @@ const FIELDS = [
   { key: 'revenue', label: 'Revenue / driver earnings', required: false, hints: ['total earnings', 'earning', 'fare', 'revenue', 'payout', 'amount'], numeric: true },
   { key: 'trips', label: 'Trips (optional)', required: false, hints: ['trips taken', 'trip count', 'trips', 'rides', 'count'], numeric: true },
   { key: 'uberKm', label: 'Distance km (optional)', required: false, hints: ['trip distance', 'distance', 'km', 'mileage'], numeric: true },
+  {
+    key: 'cashCollected',
+    label: 'Cash collected (optional)',
+    required: false,
+    hints: ['cash collected', 'cash'],
+    numeric: true,
+  },
   { key: 'status', label: 'Trip status (optional)', required: false, hints: ['trip status', 'status'] },
 ];
 
@@ -142,6 +149,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
           revenue: r[mapping.revenue],
           trips: mapping.trips ? r[mapping.trips] : undefined,
           uberKm: mapping.uberKm ? r[mapping.uberKm] : undefined,
+          cashCollected: mapping.cashCollected ? r[mapping.cashCollected] : undefined,
         }))
         .filter((r) => r.date);
 

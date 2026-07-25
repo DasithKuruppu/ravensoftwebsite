@@ -4,7 +4,7 @@ import { amount, count, dayLabel, todayLocal } from '../format.js';
 import MonthNav from '../components/MonthNav.jsx';
 import CsvImport from '../components/CsvImport.jsx';
 
-const EMPTY = { date: '', revenue: '', trips: '', uberKm: '', gpsKm: '' };
+const EMPTY = { date: '', revenue: '', trips: '', uberKm: '', gpsKm: '', cashCollected: '' };
 
 export default function DailyLog({ month, setMonth, isOwner }) {
   const [entries, setEntries] = useState([]);
@@ -42,6 +42,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
         trips: numOrNull(form.trips),
         uberKm: numOrNull(form.uberKm),
         gpsKm: numOrNull(form.gpsKm),
+        cashCollected: numOrNull(form.cashCollected),
         source: 'manual',
       });
       setForm({ ...EMPTY, date: todayLocal() });
@@ -74,6 +75,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
       trips: entry.trips ?? '',
       uberKm: entry.uberKm ?? '',
       gpsKm: entry.gpsKm ?? '',
+      cashCollected: entry.cashCollected ?? '',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -98,6 +100,11 @@ export default function DailyLog({ month, setMonth, isOwner }) {
             <Field label="Trips" value={form.trips} onChange={(v) => setForm({ ...form, trips: v })} />
             <Field label="Uber km" value={form.uberKm} onChange={(v) => setForm({ ...form, uberKm: v })} />
             <Field label="GPS km" value={form.gpsKm} onChange={(v) => setForm({ ...form, gpsKm: v })} />
+            <Field
+              label="Cash collected (LKR)"
+              value={form.cashCollected}
+              onChange={(v) => setForm({ ...form, cashCollected: v })}
+            />
             <div className="flex gap-2 pt-1">
               <button type="submit" className="btn btn-primary flex-1">
                 {editing ? 'Save changes' : 'Add entry'}
@@ -136,11 +143,12 @@ export default function DailyLog({ month, setMonth, isOwner }) {
               No entries this month yet. Add one, or import a CSV.
             </p>
           ) : (
-            <table className="w-full text-sm min-w-[34rem]">
+            <table className="w-full text-sm min-w-[40rem]">
               <thead>
                 <tr>
                   <th className="th">Date</th>
                   <th className="th text-right">Revenue</th>
+                  <th className="th text-right">Cash</th>
                   <th className="th text-right">Trips</th>
                   <th className="th text-right">Uber km</th>
                   <th className="th text-right">GPS km</th>
@@ -153,6 +161,9 @@ export default function DailyLog({ month, setMonth, isOwner }) {
                   <tr key={e.date} className={editing === e.date ? 'bg-ink-800/50' : ''}>
                     <td className="td num whitespace-nowrap">{dayLabel(e.date)}</td>
                     <td className="td num text-right text-slate-100">{amount(e.revenue)}</td>
+                    <td className="td num text-right text-warn/90">
+                      {e.cashCollected == null ? '—' : amount(e.cashCollected)}
+                    </td>
                     <td className="td num text-right">{e.trips ?? '—'}</td>
                     <td className="td num text-right">{e.uberKm ?? '—'}</td>
                     <td className="td num text-right">{e.gpsKm ?? '—'}</td>

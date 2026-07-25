@@ -107,6 +107,7 @@ async function route(method, path, event, cors) {
         trips: toNumber(body.trips),
         uberKm: toNumber(body.uberKm),
         gpsKm: toNumber(body.gpsKm),
+        cashCollected: toNumber(body.cashCollected),
         source: ['manual', 'csv', 'api'].includes(body.source) ? body.source : 'manual',
       };
       return json(200, await store.putEntry(DRIVER_ID, entry), cors);
@@ -181,6 +182,11 @@ async function buildSummary(month, auth) {
   const trips = entries.reduce((s, e) => s + (e.trips || 0), 0);
   const daysLogged = entries.length;
 
+  // Reconciliation: cash the driver holds versus what Uber sends to the bank.
+  const cashCollected = round2(entries.reduce((s, e) => s + (e.cashCollected || 0), 0));
+  const bankCredited = round2(revenue - cashCollected);
+  const daysWithCash = entries.filter((e) => e.cashCollected !== null).length;
+
   const daysInMonth = daysInMonthOf(month);
 
   // A month the driver only worked part of is judged on its operating days,
@@ -213,6 +219,11 @@ async function buildSummary(month, auth) {
     startDate: settings.startDate ?? null,
     driverPay: current.total,
     tiers: current.tiers,
+    // Both roles see this: the driver needs to know how much cash he is holding.
+    cashCollected,
+    bankCredited,
+    cashKnown: daysWithCash > 0,
+    cashShare: revenue > 0 ? Math.round((cashCollected / revenue) * 1000) / 10 : 0,
     projectedRevenue,
     projectedDriverPay: projected.total,
     // The ladder needs the band edges to draw its zones; they are not secret
@@ -285,7 +296,17 @@ export async function importRows(rows) {
     }
     const acc =
       byDate.get(date) ||
-      { date, revenue: 0, trips: 0, uberKm: 0, hasRevenue: false, hasTrips: false, hasDistance: false };
+      {
+        date,
+        revenue: 0,
+        trips: 0,
+        uberKm: 0,
+        cashCollected: 0,
+        hasRevenue: false,
+        hasTrips: false,
+        hasDistance: false,
+        hasCash: false,
+      };
 
     const revenue = toNumber(raw.revenue);
     if (revenue !== undefined) {
@@ -297,6 +318,14 @@ export async function importRows(rows) {
     if (distance !== undefined) {
       acc.uberKm += distance;
       acc.hasDistance = true;
+    }
+
+    // Uber books cash collected as a deduction from the payout, so the export
+    // carries it negative. What matters here is how much cash changed hands.
+    const cash = toNumber(raw.cashCollected);
+    if (cash !== undefined) {
+      acc.cashCollected += Math.abs(cash);
+      acc.hasCash = true;
     }
 
     // A per-trip row carries no trip count of its own — it *is* one trip.
@@ -326,6 +355,7 @@ export async function importRows(rows) {
       revenue: acc.hasRevenue ? round2(acc.revenue) : existing?.revenue ?? 0,
       trips: acc.hasTrips ? acc.trips || null : existing?.trips ?? null,
       uberKm: acc.hasDistance ? round2(acc.uberKm) : existing?.uberKm ?? null,
+      cashCollected: acc.hasCash ? round2(acc.cashCollected) : existing?.cashCollected ?? null,
       // never clobber GPS mileage — that comes from the DAGPS sync
       gpsKm: existing?.gpsKm ?? null,
       source: 'csv',

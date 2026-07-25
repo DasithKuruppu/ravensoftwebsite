@@ -90,6 +90,43 @@ describe('importRows', () => {
   });
 });
 
+describe('cash reconciliation', () => {
+  it('sums cash per day and stores it as a positive amount', async () => {
+    // Uber books cash as a deduction from the payout, so the export is negative.
+    await importRows([
+      { date: '2026-07-20', revenue: '2573.21', cashCollected: '-1505.15' },
+      { date: '2026-07-25', revenue: '2417.50', cashCollected: '-397.57' },
+    ]);
+    expect((await get('2026-07-20')).cashCollected).toBe(1505.15);
+    expect((await get('2026-07-25')).cashCollected).toBe(397.57);
+  });
+
+  it('adds up several transactions on the same day', async () => {
+    await importRows([
+      { date: '2026-07-22', revenue: '1000', cashCollected: '-400' },
+      { date: '2026-07-22', revenue: '2000', cashCollected: '-600' },
+    ]);
+    const day = await get('2026-07-22');
+    expect(day.revenue).toBe(3000);
+    expect(day.cashCollected).toBe(1000);
+  });
+
+  it('keeps cash when a later import has no cash column', async () => {
+    await importRows([{ date: '2026-07-21', revenue: '10211.21', cashCollected: '-4414.75' }]);
+    // trip activity export: distance only, no fare and no cash
+    await importRows([{ date: '2026-07-21', uberKm: '12.5' }]);
+    const day = await get('2026-07-21');
+    expect(day.cashCollected).toBe(4414.75);
+    expect(day.revenue).toBe(10211.21);
+    expect(day.uberKm).toBe(12.5);
+  });
+
+  it('leaves cash unknown rather than zero when never supplied', async () => {
+    await importRows([{ date: '2026-07-23', revenue: '500' }]);
+    expect((await get('2026-07-23')).cashCollected).toBeNull();
+  });
+});
+
 const { gpsDelta, GPS_DELTA_THRESHOLD_PCT } = await import('./handler.mjs');
 
 describe('gpsDelta', () => {

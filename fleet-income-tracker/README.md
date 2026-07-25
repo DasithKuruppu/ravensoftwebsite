@@ -98,7 +98,7 @@ for a given Colombo day.
 - **`/`** — month-to-date revenue, trips, days logged, driver take-home with the
   per-tier breakdown, month-end projection, owner share (owner only), and a tier
   ladder showing the zones, the MTD fill and a dashed projection marker.
-- **`/log`** — add/edit/delete a day, plus CSV import.
+- **`/log`** — add/edit/delete a day (including cash collected), plus CSV import.
 - **`/validate`** — days with both Uber and GPS kilometres, flagged when GPS
   exceeds Uber by more than 150%. Owner only. Uber reports *on-trip* distance
   only — it excludes driving to pickups, repositioning and the trip home — so
@@ -129,6 +129,21 @@ Per-trip exports (several rows per date) are summed into one entry per date.
 Dates are accepted as `yyyy-mm-dd`, `dd/mm/yyyy` or `mm/dd/yyyy`, and amounts
 tolerate thousands separators and currency prefixes. GPS mileage is never
 overwritten by an import.
+
+### Cash vs bank reconciliation
+
+Roughly half of every fare is paid in cash straight to the driver; the rest is
+charged to a card and settled by Uber into the company account. Only the second
+half ever reaches the bank, so the cash figure is what the driver is holding and
+has to hand over — the number that actually needs reconciling.
+
+Map the payments export's `Paid to you : Trip balance : Payouts : Cash collected`
+column and the dashboard splits gross revenue into the two halves. Uber books
+cash as a deduction from the payout, so the export carries it negative; the
+import stores the absolute amount.
+
+Both roles see the split: the driver needs to know what he owes as much as the
+owner needs to know what to collect.
 
 ### Which report to export
 

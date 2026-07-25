@@ -192,6 +192,12 @@ function toEntry(item) {
     trips: rest.trips === undefined || rest.trips === null ? null : num(rest.trips),
     uberKm: rest.uberKm === undefined || rest.uberKm === null ? null : num(rest.uberKm),
     gpsKm: rest.gpsKm === undefined || rest.gpsKm === null ? null : num(rest.gpsKm),
+    // Cash the driver took directly from riders. The rest of `revenue` reaches
+    // the company by bank, so this is the amount he owes the owner.
+    cashCollected:
+      rest.cashCollected === undefined || rest.cashCollected === null
+        ? null
+        : num(rest.cashCollected),
     source: rest.source || 'manual',
     updatedAt: rest.updatedAt,
   };

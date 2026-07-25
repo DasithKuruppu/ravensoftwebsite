@@ -4,6 +4,7 @@ import { money, amount, count, monthLabel } from '../format.js';
 import MonthNav from '../components/MonthNav.jsx';
 import TierLadder from '../components/TierLadder.jsx';
 import VehicleMap from '../components/VehicleMap.jsx';
+import CashSplit from '../components/CashSplit.jsx';
 
 export default function Dashboard({ month, setMonth, isOwner }) {
   const [summary, setSummary] = useState(null);
@@ -69,6 +70,8 @@ export default function Dashboard({ month, setMonth, isOwner }) {
           <VehicleMap />
 
           <div className="grid md:grid-cols-2 gap-5">
+            <CashSplit summary={summary} />
+
             <div className="card">
               <h2 className="label mb-3">Driver pay at current revenue</h2>
               <dl className="space-y-2">
