@@ -10,6 +10,7 @@ import PushToTier from '../components/PushToTier.jsx';
 import RunningCosts from '../components/RunningCosts.jsx';
 import ReturnOnCapital from '../components/ReturnOnCapital.jsx';
 import NextMonth from '../components/NextMonth.jsx';
+import NextMonthChart from '../components/NextMonthChart.jsx';
 import DirectCosts from '../components/DirectCosts.jsx';
 
 export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
@@ -209,6 +210,10 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
               <NextMonth summary={summary} isOwner={isOwner} />
               {isOwner && summary.costs && <ReturnOnCapital summary={summary} />}
             </div>
+            {/* Full width under the cards: three lines need the room, and the
+                cards give the same figures as numbers for anyone who would
+                rather read them that way. */}
+            <NextMonthChart summary={summary} />
           </Section>
 
           {/* Last on the page: the money figures are what the dashboard is for,

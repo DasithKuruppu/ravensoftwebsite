@@ -495,6 +495,14 @@ async function buildSummary(month, auth) {
     dailyRate,
     kmDriven,
     daysDriven,
+    // The same three paces the current-month chart runs on, so next month can
+    // be read the same way: what he makes if he keeps this up, if he keeps up
+    // today, if he keeps up yesterday.
+    paces: [
+      { key: 'current', label: 'average pace', rate: dailyRate },
+      { key: 'today', label: "today's pace", rate: dayRevenue(entries, todayInColombo())?.revenue || 0 },
+      { key: 'yesterday', label: "yesterday's pace", rate: yesterdayRevenue(entries)?.revenue || 0 },
+    ],
   });
 
   // Owner-share figures and the cost ledger are withheld from driver tokens at
@@ -1074,7 +1082,7 @@ function haversineKm(aLat, aLng, bLat, bLng) {
  * Assumes every day is driven. Days off are not knowable in advance, so this is
  * a ceiling on the run rate rather than a promise.
  */
-function buildNextMonth({ month, settings, dailyRate, kmDriven, daysDriven }) {
+function buildNextMonth({ month, settings, dailyRate, kmDriven, daysDriven, paces = [] }) {
   const [y, m] = month.split('-').map(Number);
   const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
   const days = daysInMonthOf(next);
@@ -1092,10 +1100,46 @@ function buildNextMonth({ month, settings, dailyRate, kmDriven, daysDriven }) {
     kmDriven: round2(kmPerDay * days),
     driverPay: pay.total,
     tiers: pay.tiers,
-    plan: { base: plan.base, bandStart: plan.bandStart, bandEnd: plan.bandEnd },
+    // Rates included so the browser can price a rate the driver types in
+    // without another round trip. They are not a leak: the same two numbers are
+    // already in the push card, which both roles see — it is the tier
+    // thresholds and the owner's share that are withheld from a driver.
+    plan: {
+      base: plan.base,
+      bandStart: plan.bandStart,
+      bandEnd: plan.bandEnd,
+      bandRate: settings.bandRate,
+      topRate: settings.topRate,
+    },
     // Where a full month lands against the real bands.
     reachesBand: revenue >= plan.bandStart,
     reachesTop: revenue >= plan.bandEnd,
+    // Take-home day by day under each pace, for the chart. Pay is recomputed at
+    // each running total rather than scaled, because the plan is piecewise —
+    // flat at the base until the band, then rising, then steeper. The kinks are
+    // the point: they show which day of the month each tier is reached, which a
+    // single end-of-month figure cannot.
+    series: paces
+      .filter((p) => p.rate > 0)
+      .map((p) => {
+        const points = [];
+        for (let day = 1; day <= days; day++) {
+          const r = p.rate * day;
+          points.push({ day, revenue: round2(r), pay: calculatePay(r, settings, 1).total });
+        }
+        const end = points[points.length - 1];
+        return {
+          key: p.key,
+          label: p.label,
+          dailyRate: round2(p.rate),
+          endRevenue: end.revenue,
+          endPay: end.pay,
+          // The day each threshold is crossed, or null if it never is.
+          bandDay: points.find((pt) => pt.revenue >= plan.bandStart)?.day ?? null,
+          topDay: points.find((pt) => pt.revenue >= plan.bandEnd)?.day ?? null,
+          points,
+        };
+      }),
   };
 }
 

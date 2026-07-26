@@ -26,8 +26,8 @@ const STRETCH = '#3987e5';
 const YESTERDAY = '#d95926';
 const TODAY = '#a855a8';
 
-const COLOUR = { current: ACTUAL, today: TODAY, yesterday: YESTERDAY, stretch: STRETCH };
-const DASH = { current: '5 4', today: '1 3', yesterday: '2 3', stretch: '8 4' };
+export const COLOUR = { current: ACTUAL, today: TODAY, yesterday: YESTERDAY, stretch: STRETCH };
+export const DASH = { current: '5 4', today: '1 3', yesterday: '2 3', stretch: '8 4' };
 
 const PAD = { top: 22, right: 16, bottom: 26, left: 62 };
 const HEIGHT = 230;
@@ -209,7 +209,7 @@ export default function ProjectionChart({ summary }) {
 }
 
 /** Direct label at a line's end — selective labelling, not one per point. */
-function EndLabel({ x, y, labelY, colour, value, width }) {
+export function EndLabel({ x, y, labelY, colour, value, width }) {
   const flip = x > width - 90;
   const tx = flip ? x - 8 : x + 8;
   const moved = Math.abs(labelY - y) > 2;
@@ -244,7 +244,7 @@ function EndLabel({ x, y, labelY, colour, value, width }) {
  * returned on the input objects as `labelY`; `y` — the real value — is
  * untouched.
  */
-function spreadLabels(items, top, bottom, gap = 14) {
+export function spreadLabels(items, top, bottom, gap = 14) {
   const sorted = [...items].sort((a, b) => a.y - b.y);
   if (!sorted.length) return items;
 
@@ -263,7 +263,7 @@ function spreadLabels(items, top, bottom, gap = 14) {
   return items;
 }
 
-function Key({ colour, label, dashed }) {
+export function Key({ colour, label, dashed }) {
   return (
     <span className="flex items-center gap-1.5">
       <span
@@ -300,11 +300,11 @@ function Val({ colour, label, value, sc }) {
   );
 }
 
-function shortK(v) {
+export function shortK(v) {
   return v >= 1000 ? `${Math.round(v / 1000)}k` : String(Math.round(v));
 }
 
-function niceTicks(min, max, count) {
+export function niceTicks(min, max, count) {
   const raw = (max - min) / count;
   const mag = 10 ** Math.floor(Math.log10(Math.max(1, raw)));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || mag * 10;
@@ -313,7 +313,7 @@ function niceTicks(min, max, count) {
   return out;
 }
 
-function useElementWidth(ref, fallback) {
+export function useElementWidth(ref, fallback) {
   const [w, setW] = useState(fallback);
   useEffect(() => {
     if (!ref.current) return undefined;
