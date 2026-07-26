@@ -537,8 +537,21 @@ async function buildSummary(month, auth) {
       totalPerKm: kmDriven > 0 ? round2(costs.total / kmDriven) : null,
     };
     // What is actually left after paying the driver and running the car.
-    payload.ownerProfit = round2(share - costs.total);
-    payload.projectedOwnerProfit = round2(projShare - costs.total);
+    // Uber's charges and refunds, netted off the owner's side. The driver is
+    // paid on fares, so these never touch his commission; they land on whoever
+    // holds the Uber account, which is the owner.
+    //
+    // Signed as the export gives them, so this ADDS when refunds outweigh
+    // charges. Projected pro rata on the days elapsed rather than repeated
+    // whole: a subscription charged three times in six days is a rate, not a
+    // one-off, and the same six days say nothing about the rest of the month.
+    const feesToDate = round2(entries.reduce((sum, e) => sum + (e.uberFees || 0), 0));
+    const projectedFees =
+      elapsedDays > 0 ? round2((feesToDate / elapsedDays) * operatingTotal) : feesToDate;
+    payload.uberFees = { toDate: feesToDate, projected: projectedFees, perDay: elapsedDays > 0 ? round2(feesToDate / elapsedDays) : 0 };
+
+    payload.ownerProfit = round2(share - costs.total + feesToDate);
+    payload.projectedOwnerProfit = round2(projShare - costs.total + projectedFees);
     // Owner-only half of next month: what it costs and what it leaves.
     if (payload.nextMonth) {
       const nm = payload.nextMonth;
@@ -548,7 +561,9 @@ async function buildSummary(month, auth) {
       });
       nm.costs = nmCosts;
       nm.ownerShare = ownerShare(nm.revenue, settings, 1);
-      nm.ownerProfit = round2(nm.ownerShare - nmCosts.total);
+      // Next month carries the same daily rate of Uber charges as this month.
+      nm.uberFees = round2((payload.uberFees?.perDay || 0) * nm.days);
+      nm.ownerProfit = round2(nm.ownerShare - nmCosts.total + nm.uberFees);
     }
 
     // Costs averaged over how long the car will actually be kept, so a lease
@@ -649,10 +664,12 @@ export async function importRows(rows) {
         trips: 0,
         uberKm: 0,
         cashCollected: 0,
+        uberFees: 0,
         hasRevenue: false,
         hasTrips: false,
         hasDistance: false,
         hasCash: false,
+        hasFees: false,
       };
 
     const revenue = toNumber(raw.revenue);
@@ -673,6 +690,17 @@ export async function importRows(rows) {
     if (cash !== undefined) {
       acc.cashCollected += Math.abs(cash);
       acc.hasCash = true;
+    }
+
+    // Uber's own charges and refunds — a Drive Pass subscription, a Flex Pay
+    // fee, a toll reimbursed. Kept signed as the export gives them: negative
+    // when Uber took more than it gave back. Deliberately NOT netted off
+    // revenue, because revenue is the commission basis and that is a commercial
+    // term about fares, not about what Uber charges the fleet.
+    const fees = toNumber(raw.uberFees);
+    if (fees !== undefined) {
+      acc.uberFees += fees;
+      acc.hasFees = true;
     }
 
     // A per-trip row carries no trip count of its own — it *is* one trip.
@@ -703,6 +731,7 @@ export async function importRows(rows) {
       trips: acc.hasTrips ? acc.trips || null : existing?.trips ?? null,
       uberKm: acc.hasDistance ? round2(acc.uberKm) : existing?.uberKm ?? null,
       cashCollected: acc.hasCash ? round2(acc.cashCollected) : existing?.cashCollected ?? null,
+      uberFees: acc.hasFees ? round2(acc.uberFees) : existing?.uberFees ?? null,
       // never clobber GPS mileage — that comes from the DAGPS sync
       gpsKm: existing?.gpsKm ?? null,
       source: 'csv',

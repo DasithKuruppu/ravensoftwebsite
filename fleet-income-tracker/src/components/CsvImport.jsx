@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import Papa from 'papaparse';
 import { api } from '../api.js';
-import { count, todayLocal } from '../format.js';
+import { amount, count, todayLocal } from '../format.js';
 import {
   END_TIME_COLUMN,
   START_TIME_COLUMN,
   TRIP_ID_HINTS,
   guessColumn,
   looksDateLike,
+  feeColumns,
   rememberTripStarts,
   resolveRowDate,
+  rowFees,
 } from '../csvMapping.mjs';
 
 const TRIP_STARTS_KEY = 'fleet.tripStarts';
@@ -173,6 +175,12 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
       saveTripStarts(tripStarts);
       setSavedTripStarts(tripStarts);
 
+      // Uber's own charges and refunds, spread across a column per type. Summed
+      // rather than mapped, because there is no single column to point at.
+      const feeCols = feeColumns(headers);
+      let feeTotal = 0;
+      let feeRows = 0;
+
       const basisCount = { tripStart: 0, timestamp: 0, timestampUnmatched: 0, fallback: 0, unreadable: 0 };
       const normalised = usable
         .map((r) => {
@@ -181,12 +189,18 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
           // back to the one picked below.
           const { date, basis } = resolveRowDate(r, { mapping, tripStarts, fallbackDate });
           if (basis in basisCount) basisCount[basis] += 1;
+          const fees = feeCols.length ? rowFees(r, feeCols) : undefined;
+          if (fees) {
+            feeTotal += fees;
+            feeRows += 1;
+          }
           return {
             date,
             revenue: r[mapping.revenue],
             trips: mapping.trips ? r[mapping.trips] : undefined,
             uberKm: mapping.uberKm ? r[mapping.uberKm] : undefined,
             cashCollected: mapping.cashCollected ? r[mapping.cashCollected] : undefined,
+            uberFees: fees,
           };
         })
         .filter((r) => r.date);
@@ -200,7 +214,14 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
       }
 
       if (canSaveMapping) await onSaveMapping(mapping);
-      setStatus({ imported, skipped, total: normalised.length, excluded, basis: basisCount });
+      setStatus({
+        imported,
+        skipped,
+        total: normalised.length,
+        excluded,
+        basis: basisCount,
+        fees: feeRows > 0 ? { total: feeTotal, rows: feeRows, columns: feeCols.length } : null,
+      });
       setRows(null);
       setHeaders([]);
       onImported?.();
@@ -272,6 +293,14 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
           {/* Which day each row was filed under, and on what evidence — the one
               thing that decides whether a late-night fare lands on the right
               day. */}
+          {status.fees && (
+            <span className="block text-xs text-slate-400 mt-1">
+              Uber charges and refunds:{' '}
+              <span className="num">{amount(status.fees.total)}</span> net across{' '}
+              <span className="num">{count(status.fees.rows)}</span> row(s) — kept out of revenue,
+              counted against the owner's profit.
+            </span>
+          )}
           {status.basis?.tripStart > 0 && (
             <span className="block text-xs text-slate-400 mt-1">
               <span className="num">{count(status.basis.tripStart)}</span> row(s) dated by trip

@@ -105,6 +105,14 @@ export default function NextMonth({ summary, isOwner }) {
                 )}
               </div>
             )}
+            {n.uberFees !== undefined && n.uberFees !== 0 && (
+              <Row
+                label={n.uberFees < 0 ? 'Uber charges' : 'Uber refunds'}
+                hint="at this month's rate — subscriptions and fees"
+                value={amount(n.uberFees)}
+                tone={n.uberFees < 0 ? 'text-warn' : 'text-accent'}
+              />
+            )}
             <div className="flex items-baseline justify-between gap-4 border-t border-ink-800 pt-2 mt-2">
               <dt className="text-sm font-medium text-slate-300">
                 {n.ownerProfit < 0 ? 'Shortfall' : 'Profit'}

@@ -159,3 +159,44 @@ export function looksNumeric(sample) {
 export function looksDateLike(sample) {
   return Boolean(datePart(sample));
 }
+
+/**
+ * Columns holding money that moved between the fleet and Uber outside the fare.
+ *
+ * "Your earnings" is the driver's gross, and the commission is calculated on
+ * it — but it is not everything that happens to the money. The payments export
+ * also carries a Trip balance, split into Expenses (a Drive Pass subscription,
+ * a Flex Pay fee — charges Uber makes) and Refunds (a toll reimbursed, a tax
+ * charge reversed). Importing only the earnings column loses both.
+ *
+ * They cannot be mapped through a single dropdown because Uber splits them
+ * across a column per charge type, so they are matched by name and summed. The
+ * export already signs them: expenses negative, refunds positive, so the total
+ * is the net effect on the fleet — negative when Uber has taken more than it
+ * gave back.
+ *
+ * Payouts are deliberately excluded. Cash taken by the driver and money
+ * transferred to the bank are the same fare moving, not a new cost, and they
+ * are already tracked as the cash split.
+ */
+export const UBER_FEE_COLUMN = /trip\s*balance\s*:\s*(expenses|refunds)\s*:/i;
+
+/** Every fee/refund column in a header list. */
+export function feeColumns(columns) {
+  return (columns || []).filter((c) => UBER_FEE_COLUMN.test(c));
+}
+
+/** Net of one row's fee and refund columns: negative when Uber took more. */
+export function rowFees(row, columns) {
+  let total = 0;
+  let seen = false;
+  for (const c of columns) {
+    const raw = String(row?.[c] ?? '').trim();
+    if (!raw) continue;
+    const n = Number(raw.replace(/[,\s]/g, ''));
+    if (!Number.isFinite(n)) continue;
+    total += n;
+    seen = true;
+  }
+  return seen ? total : undefined;
+}

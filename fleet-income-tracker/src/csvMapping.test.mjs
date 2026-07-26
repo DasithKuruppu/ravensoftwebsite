@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   END_TIME_COLUMN,
   START_TIME_COLUMN,
+  feeColumns,
+  rowFees,
   datePart,
   guessColumn,
   rememberTripStarts,
@@ -149,5 +151,64 @@ describe('what may teach the lookup', () => {
     expect(
       rememberTripStarts(known, rows, { tripIdColumn: 'Trip UUID', dateColumn: 'vs reporting' }),
     ).toEqual(known);
+  });
+});
+
+describe("Uber's own charges and refunds", () => {
+  // The real header set from the payments export.
+  const PAYMENT_COLS = [
+    'Trip UUID',
+    'vs reporting',
+    'Paid to you',
+    'Paid to you : Your earnings',
+    'Paid to you : Trip balance : Payouts : Cash collected',
+    'Paid to you:Trip balance:Refunds:Toll',
+    'Paid to you:Trip balance:Expenses:Driver subscription charge',
+    'Paid to you:Trip balance:Expenses:Flex Pay fee',
+    'Paid to you:Trip balance:Payouts:Transferred To Bank Account',
+    'Paid to you:Your earnings:Fare:Fare',
+  ];
+
+  it('finds every expense and refund column', () => {
+    expect(feeColumns(PAYMENT_COLS)).toEqual([
+      'Paid to you:Trip balance:Refunds:Toll',
+      'Paid to you:Trip balance:Expenses:Driver subscription charge',
+      'Paid to you:Trip balance:Expenses:Flex Pay fee',
+    ]);
+  });
+
+  it('leaves payouts alone', () => {
+    // Cash taken by the driver and money wired to the bank are the same fare
+    // moving, not a new cost — counting them would double-charge the fare.
+    const found = feeColumns(PAYMENT_COLS);
+    expect(found.some((c) => /payouts/i.test(c))).toBe(false);
+  });
+
+  it('leaves earnings alone', () => {
+    expect(feeColumns(PAYMENT_COLS).some((c) => /your earnings/i.test(c))).toBe(false);
+  });
+
+  it('nets a row, keeping the export signs', () => {
+    const row = {
+      'Paid to you:Trip balance:Refunds:Toll': '200',
+      'Paid to you:Trip balance:Expenses:Driver subscription charge': '-1204',
+      'Paid to you:Trip balance:Expenses:Flex Pay fee': '-5.92',
+    };
+    expect(rowFees(row, feeColumns(PAYMENT_COLS))).toBeCloseTo(-1009.92, 2);
+  });
+
+  it('reports nothing for a row with no fee figures at all', () => {
+    expect(rowFees({ 'Paid to you : Your earnings': '1200' }, feeColumns(PAYMENT_COLS)))
+      .toBeUndefined();
+  });
+
+  it('reports zero, not nothing, when the fees genuinely cancel', () => {
+    // A Drive Pass tax charged and refunded in the same row nets to zero, and
+    // that is a fact about the day rather than an absence of data.
+    const row = {
+      'Paid to you:Trip balance:Refunds:Toll': '550.98',
+      'Paid to you:Trip balance:Expenses:Driver subscription charge': '-550.98',
+    };
+    expect(rowFees(row, feeColumns(PAYMENT_COLS))).toBe(0);
   });
 });

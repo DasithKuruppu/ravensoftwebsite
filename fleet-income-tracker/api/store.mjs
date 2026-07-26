@@ -301,6 +301,10 @@ function toEntry(item) {
       rest.cashCollected === undefined || rest.cashCollected === null
         ? null
         : num(rest.cashCollected),
+    // Net of Uber's charges and refunds for the day. Negative when Uber took
+    // more than it gave back.
+    uberFees:
+      rest.uberFees === undefined || rest.uberFees === null ? null : num(rest.uberFees),
     source: rest.source || 'manual',
     // A day the driver was not working. Kept separate from "no entry", which
     // only means nobody has recorded anything yet.

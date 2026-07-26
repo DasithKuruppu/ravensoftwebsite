@@ -50,6 +50,14 @@ export default function RunningCosts({ summary }) {
       )}
 
       <dl className="mt-3 pt-3 border-t border-ink-800 space-y-1.5">
+        {summary.uberFees && summary.uberFees.toDate !== 0 && (
+          <Row
+            label={summary.uberFees.toDate < 0 ? 'Uber charges' : 'Uber refunds'}
+            hint="subscriptions, fees and refunds — never charged to the driver"
+            value={amount(summary.uberFees.toDate)}
+            tone={summary.uberFees.toDate < 0 ? 'text-warn' : 'text-accent'}
+          />
+        )}
         {costs.chargingPerKm !== null && costs.chargingPerKm !== undefined && (
           <Row
             label="Charging per km"
