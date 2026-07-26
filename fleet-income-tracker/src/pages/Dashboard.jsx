@@ -124,8 +124,6 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
               is the one card written for the driver rather than the owner. */}
           <PushToTier summary={summary} />
 
-          <ProjectionChart summary={summary} />
-
           {/* One flowing two-column grid rather than a series of ad-hoc rows.
               Two of those rows previously held a single card, which rendered as
               a half-width orphan with dead space beside it. Here the cards fill
@@ -200,20 +198,26 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
             {isOwner && summary.costs && <RunningCosts summary={summary} />}
 
           </div>
+
+          {/* Last in the section, so it runs straight into next month's chart
+              below it. */}
+          <ProjectionChart summary={summary} />
           </Section>
 
           <Section
             title={`Next month · ${monthLabel(`${summary.nextMonth?.month || month}-01`)}`}
             subtitle="at average pace, on full commission bands"
           >
+            {/* First in the section, directly under this month's chart: the
+                two are the same picture at two dates and compare best when
+                nothing sits between them. The cards below give the same
+                figures as numbers. */}
+            <NextMonthChart summary={summary} />
+
             <div className="grid md:grid-cols-2 gap-5 items-start">
               <NextMonth summary={summary} isOwner={isOwner} />
               {isOwner && summary.costs && <ReturnOnCapital summary={summary} />}
             </div>
-            {/* Full width under the cards: three lines need the room, and the
-                cards give the same figures as numbers for anyone who would
-                rather read them that way. */}
-            <NextMonthChart summary={summary} />
           </Section>
 
           {/* Last on the page: the money figures are what the dashboard is for,
