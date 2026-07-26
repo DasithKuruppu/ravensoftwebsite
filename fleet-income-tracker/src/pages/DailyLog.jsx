@@ -199,8 +199,8 @@ export default function DailyLog({ month, setMonth, isOwner }) {
                     <td className="td num whitespace-nowrap">
                       {dayLabel(e.date)}
                       {e.offDay && (
-                        <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-500 border border-ink-700 rounded px-1">
-                          off
+                        <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-500 border border-ink-700 rounded px-1 whitespace-nowrap">
+                          day off
                         </span>
                       )}
                     </td>

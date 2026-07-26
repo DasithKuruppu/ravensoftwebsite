@@ -320,10 +320,44 @@ async function buildSummary(month, auth) {
   const earningDays = entries.filter(
     (e) => !e.offDay && e.date <= todayInColombo() && ((e.revenue || 0) > 0 || (e.trips || 0) > 0),
   ).length;
-  // Elapsed days still waiting on their figures. They are not in the average,
-  // but the month is not over for them either, so the projection expects them
-  // to land at the going rate rather than at zero.
-  const pendingDays = Math.max(0, elapsedDays - offElapsed - earningDays);
+  // Elapsed days with no figures: not in the average, and not projected either.
+  // Crediting a past day with income that never arrived would be speculation
+  // about the past rather than a projection of the future — and it would make
+  // the chart disagree with itself, since that income has to be spread over the
+  // days still to come, which then draw at a higher rate than the average they
+  // are labelled with. If the data turns up, revenue rises and the projection
+  // follows; if he was resting, marking the day off says so.
+  // Today is excluded: its figures arrive with the evening's import, so its
+  // absence is the normal state for most of the day and not a gap to flag. It
+  // is also still ahead of the projection rather than left out of it.
+  const todayEntry = entries.find((e) => e.date === todayInColombo());
+  const todayAccounted = Boolean(
+    todayEntry &&
+      (todayEntry.offDay || (todayEntry.revenue || 0) > 0 || (todayEntry.trips || 0) > 0),
+  );
+  const pendingDays = Math.max(
+    0,
+    elapsedDays - offElapsed - earningDays - (todayAccounted ? 0 : 1),
+  );
+
+  // The projection runs from the last day that HAS figures, not from today.
+  // Today has usually not been imported yet, so it is still a day expected to
+  // earn rather than a day that earned nothing.
+  const lastFiguresDate = entries
+    .filter((e) => !e.offDay && ((e.revenue || 0) > 0 || (e.trips || 0) > 0))
+    .map((e) => e.date)
+    .sort()
+    .pop();
+  const firstOperatingDay = daysInMonth - operatingTotal + 1;
+  const lastFiguresDay = lastFiguresDate
+    ? Number(lastFiguresDate.slice(8, 10))
+    : firstOperatingDay - 1;
+  const offAfterFigures = entries.filter(
+    (e) => e.offDay && Number(e.date.slice(8, 10)) > lastFiguresDay,
+  ).length;
+  // Days still expected to earn: every operating day after the last one with
+  // figures, less any already marked off.
+  const projectedDays = Math.max(0, daysInMonth - lastFiguresDay - offAfterFigures);
 
   // Days the CAR ran, which is a different question and drives the per-day
   // costs. A day with GPS distance but no Uber trips still burned electricity,
@@ -338,7 +372,7 @@ async function buildSummary(month, auth) {
   const remainingWorkDays = Math.max(0, operatingTotal - elapsedDays - offAhead);
 
   const dailyRate = earningDays > 0 ? revenue / earningDays : 0;
-  const projectedRevenue = round2(revenue + dailyRate * (remainingWorkDays + pendingDays));
+  const projectedRevenue = round2(revenue + dailyRate * projectedDays);
   // Distance for usage-based costs. GPS first: the tracker sees every kilometre
   // the car moves, whereas Uber only counts the on-trip leg — and the car is
   // charged for all of it. Uber's figure is a fallback for days with no GPS.
@@ -364,6 +398,7 @@ async function buildSummary(month, auth) {
     projectedRevenue,
     yesterday: yesterdayRevenue(entries),
     today: dayRevenue(entries, todayInColombo()),
+    lastFiguresDay,
   });
 
   const payload = {
@@ -379,7 +414,7 @@ async function buildSummary(month, auth) {
       dailyAverage: dailyRate,
       elapsedDays,
       operatingTotal,
-      remainingWorkDays,
+      remainingWorkDays: projectedDays,
       projectedPay: projected.total,
     }),
     trips,
@@ -392,6 +427,7 @@ async function buildSummary(month, auth) {
     earningDays,
     daysDriven,
     pendingDays,
+    projectedDays,
     offDaysElapsed: offElapsed,
     offDaysAhead: offAhead,
     remainingWorkDays,
@@ -852,7 +888,7 @@ export function buildPush({
  */
 function buildSeries({
   entries, settings, factor, daysInMonth, elapsedDays, operatingTotal, revenue, projectedRevenue,
-  yesterday, today: todayEntry,
+  yesterday, today: todayEntry, lastFiguresDay,
 }) {
   if (!operatingTotal) return { actual: [], scenarios: [] };
 
@@ -861,19 +897,23 @@ function buildSeries({
   const plan = prorate(settings, factor);
   const payAt = (r) => calculatePay(r, settings, factor).total;
 
-  // Actual, day by day, up to today.
+  // Actual, day by day, to the last day that has figures — not to today. A
+  // flat run out to an un-imported today would read as days he earned nothing,
+  // and it would leave the projected tail spanning fewer days than the
+  // projection covers, so the tail would climb at a steeper rate than the
+  // average pace it is labelled with.
+  const drawTo = Math.max(firstDay, Math.min(lastFiguresDay ?? firstDay + elapsedDays - 1, firstDay + elapsedDays - 1));
   const actual = [];
   let cumulative = 0;
-  for (let i = 0; i < elapsedDays; i++) {
-    const day = firstDay + i;
+  for (let day = firstDay; day <= drawTo; day++) {
     cumulative += byDay.get(day) || 0;
     actual.push({ day, revenue: round2(cumulative), pay: payAt(cumulative) });
   }
   if (!actual.length) actual.push({ day: firstDay, revenue: 0, pay: payAt(0) });
 
   const today = actual[actual.length - 1];
-  const daysLeft = operatingTotal - elapsedDays;
   const lastDay = firstDay + operatingTotal - 1;
+  const daysLeft = lastDay - today.day;
 
   // A finish is described by the revenue it ends on; the tail is a straight
   // run from today to that number, with pay recomputed along the way.

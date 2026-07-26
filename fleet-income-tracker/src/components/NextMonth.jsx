@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { money, amount, monthLabel } from '../format.js';
+import { categoryLabel } from '../../shared/costs.mjs';
 
 /**
  * Next month at the average daily pace.
@@ -13,6 +15,9 @@ import { money, amount, monthLabel } from '../format.js';
  */
 export default function NextMonth({ summary, isOwner }) {
   const n = summary.nextMonth;
+  // Collapsed by default: the profit line is the answer, the breakdown is the
+  // working. Open it when the answer is surprising and you want to know why.
+  const [showCosts, setShowCosts] = useState(false);
   if (!n) return null;
 
   const tierLabel = n.reachesTop ? 'tier 3' : n.reachesBand ? 'tier 2' : 'base only';
@@ -47,12 +52,58 @@ export default function NextMonth({ summary, isOwner }) {
 
         {isOwner && n.costs && (
           <>
-            <Row
-              label="Running costs"
-              hint={`${amount(n.kmDriven)} km projected`}
-              value={`− ${amount(n.costs.total)}`}
-              tone="text-warn"
-            />
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-sm text-slate-400">
+                <button
+                  type="button"
+                  className="text-left hover:text-slate-200 transition-colors"
+                  onClick={() => setShowCosts((v) => !v)}
+                  aria-expanded={showCosts}
+                >
+                  Running costs{' '}
+                  <span className="text-slate-600 text-xs">
+                    {showCosts ? '▾' : '▸'} {n.costs.items.length} item
+                    {n.costs.items.length === 1 ? '' : 's'}
+                  </span>
+                </button>
+                <span className="block text-xs text-slate-600">
+                  {amount(n.kmDriven)} km projected
+                </span>
+              </dt>
+              <dd className="num text-warn">− {amount(n.costs.total)}</dd>
+            </div>
+
+            {/* Same shape as the running-costs card for this month, so the two
+                read as the same ledger at two dates. Each line shows what it
+                was multiplied by — a per-km cost next month is a projection of
+                distance as much as of price. */}
+            {showCosts && (
+              <div className="pl-3 border-l border-ink-800 space-y-1.5 py-1">
+                {n.costs.items.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    No costs recorded. Add them under Settings.
+                  </p>
+                ) : (
+                  n.costs.items.map((c) => (
+                    <div key={c.id} className="flex items-baseline justify-between gap-4">
+                      <dt className="text-xs text-slate-500">
+                        {c.label}
+                        <span className="text-slate-600 ml-2">
+                          {categoryLabel(c.category)}
+                          {c.frequency === 'annual' && ' · yearly ÷ 12'}
+                          {c.frequency === 'once' && ' · one-off'}
+                          {c.basis && ` · ${amount(c.amount)} × ${c.basis}`}
+                          {c.remaining !== null &&
+                            c.remaining !== undefined &&
+                            ` · ${c.remaining} left`}
+                        </span>
+                      </dt>
+                      <dd className="num text-xs text-slate-400">{amount(c.monthly)}</dd>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
             <div className="flex items-baseline justify-between gap-4 border-t border-ink-800 pt-2 mt-2">
               <dt className="text-sm font-medium text-slate-300">
                 {n.ownerProfit < 0 ? 'Shortfall' : 'Profit'}

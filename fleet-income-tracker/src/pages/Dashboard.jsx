@@ -184,9 +184,9 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
               {summary.pendingDays > 0 && (
                 <p className="text-xs text-slate-500 mt-4">
                   <span className="num">{count(summary.pendingDays)}</span> elapsed day
-                  {summary.pendingDays === 1 ? ' has' : 's have'} no Uber figures yet — projected
-                  at the average rather than counted as zero. Mark a day off if he was not
-                  driving, so it stops being treated as an import that has not run.
+                  {summary.pendingDays === 1 ? ' has' : 's have'} no Uber figures — left out of
+                  both the average and the projection rather than counted as zero. Import the
+                  day, or mark it off if he was not driving.
                 </p>
               )}
             </div>

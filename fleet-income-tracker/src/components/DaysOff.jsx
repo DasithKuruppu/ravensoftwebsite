@@ -79,7 +79,7 @@ export default function DaysOff({ entries, month, onChange }) {
       {off.length > 0 && (
         <div className="mt-4">
           <div className="label mb-2">
-            Marked off this month · <span className="num">{off.length}</span>
+            Days off this month · <span className="num">{off.length}</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {off.map((e) => (
