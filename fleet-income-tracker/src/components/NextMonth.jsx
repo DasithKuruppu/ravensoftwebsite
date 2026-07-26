@@ -15,9 +15,10 @@ import { categoryLabel } from '../../shared/costs.mjs';
  */
 export default function NextMonth({ summary, isOwner }) {
   const n = summary.nextMonth;
-  // Collapsed by default: the profit line is the answer, the breakdown is the
-  // working. Open it when the answer is surprising and you want to know why.
-  const [showCosts, setShowCosts] = useState(false);
+  // Open by default. Collapsing it hid the one part of the forecast worth
+  // arguing with — a projected cost is an assumption, and an assumption you
+  // cannot see is one you cannot correct. It still folds away.
+  const [showCosts, setShowCosts] = useState(true);
   if (!n) return null;
 
   const tierLabel = n.reachesTop ? 'tier 3' : n.reachesBand ? 'tier 2' : 'base only';

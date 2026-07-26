@@ -176,11 +176,14 @@ async function route(method, path, event, cors) {
             : /^\d{4}-\d{2}-\d{2}$/.test(body.startDate || '')
               ? body.startDate
               : null,
-        capitalInvested: toNumber(body.capitalInvested) ?? current.capitalInvested ?? null,
+        // `null` clears the field; `undefined` (absent from the body) keeps it.
+        // Without the distinction an emptied box in Settings silently kept the
+        // old figure, since a blank input parses to no number rather than zero.
+        capitalInvested: clearable(body.capitalInvested, current.capitalInvested),
         alternativeRatePct: toNumber(body.alternativeRatePct) ?? current.alternativeRatePct ?? 9,
         leasedPercent: clampPct(toNumber(body.leasedPercent) ?? current.leasedPercent ?? 0),
         holdingYears: Math.min(30, Math.max(1, toNumber(body.holdingYears) ?? current.holdingYears ?? 5)),
-        resaleValue: toNumber(body.resaleValue) ?? current.resaleValue ?? null,
+        resaleValue: clearable(body.resaleValue, current.resaleValue),
         driverName:
           typeof body.driverName === 'string' && body.driverName.trim()
             ? body.driverName.trim().slice(0, 40)
@@ -1228,6 +1231,12 @@ function irr(outlay, monthly, months, terminal) {
 }
 
 const clampPct = (n) => Math.min(100, Math.max(0, Number(n) || 0));
+
+/** An optional number: null clears it, absent keeps it, anything else parses. */
+function clearable(value, current) {
+  if (value === null) return null;
+  return toNumber(value) ?? current ?? null;
+}
 
 /** Normalise a cost line before storing it. */
 function cleanCost(c) {
