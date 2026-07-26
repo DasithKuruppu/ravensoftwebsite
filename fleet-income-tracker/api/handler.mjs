@@ -304,11 +304,41 @@ async function buildSummary(month, auth) {
   // the denominators of the average and the projection change.
   const offElapsed = entries.filter((e) => e.offDay && e.date <= todayInColombo()).length;
   const offAhead = entries.filter((e) => e.offDay && e.date > todayInColombo()).length;
-  const workedDays = Math.max(0, elapsedDays - offElapsed);
+
+  // The average is over days that ACTUALLY EARNED, not days that have gone by.
+  //
+  // Three kinds of day get counted as elapsed but should not divide the
+  // earnings: a marked day off; today, whose figures usually arrive with the
+  // evening's import; and any past day nobody has imported yet. Dividing by
+  // them reads as "he earned nothing that day", which drags the average down
+  // for a day he was resting and for a day whose data is merely late — and the
+  // average is the basis of every projection on the page.
+  //
+  // A day with an entry but no Uber activity counts the same way. The 23rd is
+  // the case: GPS recorded 45.83 km, Uber recorded nothing, so nobody knows yet
+  // whether that was a quiet shift or a personal errand.
+  const earningDays = entries.filter(
+    (e) => !e.offDay && e.date <= todayInColombo() && ((e.revenue || 0) > 0 || (e.trips || 0) > 0),
+  ).length;
+  // Elapsed days still waiting on their figures. They are not in the average,
+  // but the month is not over for them either, so the projection expects them
+  // to land at the going rate rather than at zero.
+  const pendingDays = Math.max(0, elapsedDays - offElapsed - earningDays);
+
+  // Days the CAR ran, which is a different question and drives the per-day
+  // costs. A day with GPS distance but no Uber trips still burned electricity,
+  // so it is charged for even though it earned nothing and stays out of the
+  // revenue average.
+  const daysDriven = entries.filter(
+    (e) =>
+      !e.offDay &&
+      e.date <= todayInColombo() &&
+      ((e.gpsKm || 0) > 0 || (e.uberKm || 0) > 0 || (e.revenue || 0) > 0 || (e.trips || 0) > 0),
+  ).length;
   const remainingWorkDays = Math.max(0, operatingTotal - elapsedDays - offAhead);
 
-  const dailyRate = workedDays > 0 ? revenue / workedDays : 0;
-  const projectedRevenue = round2(revenue + dailyRate * remainingWorkDays);
+  const dailyRate = earningDays > 0 ? revenue / earningDays : 0;
+  const projectedRevenue = round2(revenue + dailyRate * (remainingWorkDays + pendingDays));
   // Distance for usage-based costs. GPS first: the tracker sees every kilometre
   // the car moves, whereas Uber only counts the on-trip leg — and the car is
   // charged for all of it. Uber's figure is a fallback for days with no GPS.
@@ -357,7 +387,11 @@ async function buildSummary(month, auth) {
     daysInMonth,
     elapsedDays,
     operatingDays: operatingTotal,
-    workedDays,
+    // Days that earned, days the car ran, and days still waiting on figures —
+    // three different denominators that used to be one.
+    earningDays,
+    daysDriven,
+    pendingDays,
     offDaysElapsed: offElapsed,
     offDaysAhead: offAhead,
     remainingWorkDays,
@@ -398,7 +432,7 @@ async function buildSummary(month, auth) {
   // Computed for both roles, unlike the full ledger.
   const allCosts = await store.getCosts();
   const directCosts = costsForMonth(allCosts.filter(isDriverVisible), month, {
-    daysDriven: workedDays,
+    daysDriven,
     kmDriven,
   });
   payload.directCosts = {
@@ -420,7 +454,7 @@ async function buildSummary(month, auth) {
     settings,
     dailyRate,
     kmDriven,
-    workedDays,
+    daysDriven,
   });
 
   // Owner-share figures and the cost ledger are withheld from driver tokens at
@@ -433,7 +467,7 @@ async function buildSummary(month, auth) {
     // reading over Uber's, since charging pays for every kilometre rather than
     // only the on-trip ones.
     const costs = costsForMonth(allCosts, month, {
-      daysDriven: workedDays,
+      daysDriven,
       kmDriven,
     });
 
@@ -985,7 +1019,7 @@ function haversineKm(aLat, aLng, bLat, bLng) {
  * Assumes every day is driven. Days off are not knowable in advance, so this is
  * a ceiling on the run rate rather than a promise.
  */
-function buildNextMonth({ month, settings, dailyRate, kmDriven, workedDays }) {
+function buildNextMonth({ month, settings, dailyRate, kmDriven, daysDriven }) {
   const [y, m] = month.split('-').map(Number);
   const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
   const days = daysInMonthOf(next);
@@ -993,7 +1027,7 @@ function buildNextMonth({ month, settings, dailyRate, kmDriven, workedDays }) {
   const revenue = round2(dailyRate * days);
   const pay = calculatePay(revenue, settings, 1);
   const plan = prorate(settings, 1);
-  const kmPerDay = workedDays > 0 ? kmDriven / workedDays : 0;
+  const kmPerDay = daysDriven > 0 ? kmDriven / daysDriven : 0;
 
   return {
     month: next,

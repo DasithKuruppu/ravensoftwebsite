@@ -61,7 +61,14 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
           >
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <Stat label="Total revenue (LKR)" value={amount(summary.revenue)} accent />
-            <Stat label="Daily average (LKR)" value={amount(summary.dailyAverage)} />
+            <Stat
+              label="Daily average (LKR)"
+              value={amount(summary.dailyAverage)}
+              // Say what it is divided by. Days off and days still waiting on
+              // an import are not in it, and the number is meaningless without
+              // knowing that.
+              hint={`over ${count(summary.earningDays)} earning day${summary.earningDays === 1 ? '' : 's'}`}
+            />
             <Stat
               label="Today (LKR)"
               value={summary.today ? amount(summary.today.revenue) : '—'}
@@ -89,7 +96,14 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
             <Stat label="Trips" value={count(summary.trips)} />
             <Stat
               label="Days logged"
-              value={`${count(summary.daysLogged)} / ${count(summary.operatingDays)}`}
+              value={`${count(summary.earningDays)} / ${count(summary.operatingDays)}`}
+              hint={
+                summary.offDaysElapsed > 0
+                  ? `${count(summary.offDaysElapsed)} day off`
+                  : summary.pendingDays > 0
+                    ? `${count(summary.pendingDays)} awaiting figures`
+                    : undefined
+              }
             />
             <Stat
               label={`${summary.driverName} take-home (LKR)`}
@@ -167,10 +181,12 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
                   />
                 )}
               </dl>
-              {summary.elapsedDays > 0 && summary.daysLogged < summary.elapsedDays && (
-                <p className="text-xs text-warn/80 mt-4">
-                  {summary.elapsedDays - summary.daysLogged} elapsed day(s) have no entry — the
-                  projection treats them as zero revenue.
+              {summary.pendingDays > 0 && (
+                <p className="text-xs text-slate-500 mt-4">
+                  <span className="num">{count(summary.pendingDays)}</span> elapsed day
+                  {summary.pendingDays === 1 ? ' has' : 's have'} no Uber figures yet — projected
+                  at the average rather than counted as zero. Mark a day off if he was not
+                  driving, so it stops being treated as an import that has not run.
                 </p>
               )}
             </div>
