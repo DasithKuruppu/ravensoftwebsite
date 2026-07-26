@@ -545,9 +545,19 @@ async function buildSummary(month, auth) {
 
     // Costs averaged over how long the car will actually be kept, so a lease
     // that ends part-way through is not charged as if it ran forever.
+    //
+    // The window is ANCHORED to when the money went in, not to next month. A
+    // window that always ran "the next five years" would slide forward every
+    // month while the capital was only ever spent once, so the return would
+    // drift permanently optimistic — always measuring a fresh five years
+    // against a single outlay. It also cut the lease short at one end: the
+    // first instalment fell before a window that opened next month, so the
+    // levelled figure came to 59/60 of it and the two profit figures on the
+    // dashboard disagreed by 866.67 for no reason a reader could see.
     const horizonMonths = Math.round((Number(settings.holdingYears) || 5) * 12);
+    const holdingStart = holdingStartMonth(settings, allCosts);
     const levelised = payload.nextMonth
-      ? levelisedMonthly(allCosts, payload.nextMonth.month, {
+      ? levelisedMonthly(allCosts, holdingStart, {
           daysDriven: payload.nextMonth.days,
           kmDriven: payload.nextMonth.kmDriven,
         }, horizonMonths)
@@ -563,6 +573,7 @@ async function buildSummary(month, auth) {
         payload.nextMonth && levelised ? round2(payload.nextMonth.ownerShare - levelised.total) : null,
       levelised,
       horizonMonths,
+      holdingStart,
     });
   }
 
@@ -1103,7 +1114,7 @@ function buildNextMonth({ month, settings, dailyRate, kmDriven, daysDriven }) {
  */
 function buildRoi({
   settings, thisMonthProfit, nextMonthProfit, nextMonthLabel,
-  levelisedProfit, levelised, horizonMonths,
+  levelisedProfit, levelised, horizonMonths, holdingStart,
 }) {
   const capital = Number(settings.capitalInvested) || 0;
   const ratePct = Number(settings.alternativeRatePct) || 0;
@@ -1190,6 +1201,8 @@ function buildRoi({
     monthlyAlternative,
     nextMonthLabel,
     horizonMonths,
+    holdingStart,
+    holdingEnd: addMonths(holdingStart, horizonMonths - 1),
     holdingYears: Math.round((horizonMonths / 12) * 10) / 10,
     levelised,
     // Lead on the whole holding period — that is the investment question. The
@@ -1231,6 +1244,28 @@ function irr(outlay, monthly, months, terminal) {
 }
 
 const clampPct = (n) => Math.min(100, Math.max(0, Number(n) || 0));
+
+/**
+ * The month the capital was committed — the start of the holding period.
+ *
+ * The earliest of the operation's start date and any financed cost, because the
+ * clock starts when the money does. Falls back to the current month for a fleet
+ * with neither recorded.
+ */
+function holdingStartMonth(settings, costs) {
+  const dates = [settings?.startDate, ...(costs || []).map((c) => (c.termMonths ? c.date : null))]
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d || ''))
+    .map((d) => d.slice(0, 7))
+    .sort();
+  return dates[0] || todayInColombo().slice(0, 7);
+}
+
+/** yyyy-mm plus n months. */
+function addMonths(month, n) {
+  const [y, m] = String(month).split('-').map(Number);
+  const total = (y * 12 + (m - 1)) + n;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}`;
+}
 
 /** An optional number: null clears it, absent keeps it, anything else parses. */
 function clearable(value, current) {

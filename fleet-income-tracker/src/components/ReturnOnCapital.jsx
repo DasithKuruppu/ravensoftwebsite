@@ -60,6 +60,12 @@ export default function ReturnOnCapital({ summary }) {
         {t
           ? `${r.holdingYears} years of profit plus the car at the end, compounded`
           : `based on ${basisLabel}`}
+        {r.holdingStart && (
+          <span className="block text-slate-600">
+            {monthLabel(`${r.holdingStart}-01`)} – {monthLabel(`${r.holdingEnd}-01`)}, counted from
+            when the money went in
+          </span>
+        )}
       </p>
 
       <div className="grid grid-cols-2 gap-3">
@@ -200,7 +206,8 @@ export default function ReturnOnCapital({ summary }) {
       {/* The two profit figures on this dashboard differ, and the difference is
           entirely the levelling above. Saying so here saves anyone comparing
           the two cards from assuming one of them is wrong. */}
-      {r.nextMonth && r.overHolding && (
+      {r.nextMonth && r.overHolding &&
+        Math.abs(r.overHolding.monthlyProfit - r.nextMonth.monthlyProfit) >= 0.01 && (
         <p className="text-xs text-slate-500 mt-3">
           Next month's card shows{' '}
           <span className="num">{money(r.nextMonth.monthlyProfit)}</span> profit; this card averages{' '}
@@ -211,13 +218,13 @@ export default function ReturnOnCapital({ summary }) {
           a month of costs that stop before the {r.holdingYears} years are up — next month pays
           them in full, the average does not.
         </p>
-      )}
+        )}
 
       {/* Single months, for contrast — shown but not led on. */}
       <p className="text-xs text-slate-600 mt-3">
         {r.nextMonth && (
           <>
-            Next month alone, still paying the full instalment, returns{' '}
+            Next month's cash alone, without counting the car at the end, returns{' '}
             <span className="num">{r.nextMonth.returnPct}%</span>.{' '}
           </>
         )}
