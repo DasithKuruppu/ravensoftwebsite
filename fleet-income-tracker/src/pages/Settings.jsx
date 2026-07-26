@@ -46,6 +46,7 @@ export default function Settings() {
         alternativeRatePct: Number(form.alternativeRatePct) || 0,
         leasedPercent: Number(form.leasedPercent) || 0,
         holdingYears: Number(form.holdingYears) || 5,
+        resaleValue: form.resaleValue === '' ? null : Number(form.resaleValue),
         driverName: (form.driverName || '').trim() || 'Driver',
         base: Number(form.base),
         bandStart: Number(form.bandStart),
@@ -175,6 +176,25 @@ export default function Settings() {
                 value={form.holdingYears ?? ''}
                 onChange={(e) => setForm({ ...form, holdingYears: e.target.value })}
               />
+            </div>
+            <div className="grid gap-1">
+              <label className="label" htmlFor="resaleValue">
+                Expected resale after those years
+              </label>
+              <input
+                id="resaleValue"
+                type="number"
+                step="1000"
+                min="0"
+                className="num"
+                value={form.resaleValue ?? ''}
+                onChange={(e) => setForm({ ...form, resaleValue: e.target.value })}
+              />
+              <p className="text-xs text-slate-600">
+                Entered instead of a depreciation cost. The lease is paid in full out of profit,
+                and what that buys is a car owned outright — booking depreciation as well would
+                charge for the same loss of value twice.
+              </p>
             </div>
             <div className="grid gap-1">
               <label className="label" htmlFor="alternativeRatePct">

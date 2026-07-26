@@ -180,6 +180,7 @@ async function route(method, path, event, cors) {
         alternativeRatePct: toNumber(body.alternativeRatePct) ?? current.alternativeRatePct ?? 9,
         leasedPercent: clampPct(toNumber(body.leasedPercent) ?? current.leasedPercent ?? 0),
         holdingYears: Math.min(30, Math.max(1, toNumber(body.holdingYears) ?? current.holdingYears ?? 5)),
+        resaleValue: toNumber(body.resaleValue) ?? current.resaleValue ?? null,
         driverName:
           typeof body.driverName === 'string' && body.driverName.trim()
             ? body.driverName.trim().slice(0, 40)
@@ -1133,6 +1134,50 @@ function buildRoi({
   const thisMonth = basis(thisMonthProfit);
   const overHolding = basis(levelisedProfit);
 
+  // Total return: the monthly profit for as long as the car is kept, plus the
+  // car itself at the end.
+  //
+  // The monthly profit already carries the whole lease instalment, so the
+  // vehicle is paid for out of it — and at the end of the term it is owned
+  // outright. Charging depreciation on top would bill for that loss of value
+  // twice; crediting the resale value instead states the same fact the right
+  // way round, and it is one number to estimate rather than a schedule.
+  //
+  // Compounded rather than averaged, because 60 monthly receipts and a lump at
+  // the end are not the same thing as their sum: money back sooner can be
+  // reinvested, which is precisely the comparison being made against a deposit
+  // paying the alternative rate.
+  const resale = Number(settings.resaleValue);
+  const totalReturn =
+    Number.isFinite(resale) && resale >= 0 && overHolding && equity > 0
+      ? (() => {
+          const monthly = irr(equity, overHolding.monthlyProfit, horizonMonths, resale);
+          const annualPct = monthly === null ? null : Math.round(((1 + monthly) ** 12 - 1) * 1000) / 10;
+          const cash = round2(overHolding.monthlyProfit * horizonMonths + resale);
+          return {
+            resale: round2(resale),
+            months: horizonMonths,
+            annualPct,
+            // Undiscounted, for the reader who wants the plain arithmetic.
+            totalCash: cash,
+            multiple: Math.round((cash / equity) * 100) / 100,
+            beatsAlternative: annualPct !== null && annualPct >= ratePct,
+            // Resale is a guess, so show what it is worth being wrong about.
+            sensitivity: [-500000, 0, 500000]
+              .map((delta) => {
+                const value = resale + delta;
+                if (value < 0) return null;
+                const m = irr(equity, overHolding.monthlyProfit, horizonMonths, value);
+                return {
+                  resale: round2(value),
+                  annualPct: m === null ? null : Math.round(((1 + m) ** 12 - 1) * 1000) / 10,
+                };
+              })
+              .filter(Boolean),
+          };
+        })()
+      : null;
+
   return {
     capital: round2(capital),
     leasedPct,
@@ -1151,7 +1196,35 @@ function buildRoi({
     overHolding,
     nextMonth,
     thisMonth,
+    totalReturn,
   };
+}
+
+/**
+ * Monthly internal rate of return: outlay now, a level receipt each month, and
+ * a lump at the end.
+ *
+ * Bisection rather than a formula because the equation has no closed form.
+ * Returns null when no rate in the searched range balances it — a car that
+ * never repays its capital has no meaningful rate of return, and inventing one
+ * would be worse than saying so.
+ */
+function irr(outlay, monthly, months, terminal) {
+  if (!(outlay > 0) || !(months > 0)) return null;
+  const npv = (r) => {
+    let sum = -outlay;
+    for (let t = 1; t <= months; t++) sum += monthly / (1 + r) ** t;
+    return sum + terminal / (1 + r) ** months;
+  };
+  let lo = -0.9 / 12;
+  let hi = 1;
+  if (npv(lo) < 0 || npv(hi) > 0) return null;
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    if (npv(mid) > 0) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
 }
 
 const clampPct = (n) => Math.min(100, Math.max(0, Number(n) || 0));

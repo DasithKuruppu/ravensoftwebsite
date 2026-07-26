@@ -40,7 +40,15 @@ export default function ReturnOnCapital({ summary }) {
       : r.headlineBasis === 'nextMonth' && r.nextMonthLabel
         ? `${monthLabel(`${r.nextMonthLabel}-01`)} at this rate`
         : 'this month, annualised';
-  const tone = h.beatsAlternative ? 'text-accent' : 'text-danger';
+  // With a resale value entered the headline becomes the TOTAL return: the
+  // monthly profit for as long as the car is kept, plus the car itself at the
+  // end. That is the complete answer to "was this worth doing", and it is the
+  // one the lease makes possible to state — the instalment is paid in full out
+  // of profit, so what it buys is an asset owned outright.
+  const t = r.totalReturn;
+  const headlinePct = t && t.annualPct !== null ? t.annualPct : h.returnPct;
+  const beats = t ? t.beatsAlternative : h.beatsAlternative;
+  const tone = beats ? 'text-accent' : 'text-danger';
 
   return (
     <div className="card">
@@ -48,22 +56,30 @@ export default function ReturnOnCapital({ summary }) {
         <h2 className="label">Return on capital</h2>
         <span className="text-xs text-slate-500">owner only</span>
       </div>
-      <p className="text-xs text-slate-500 mb-3">based on {basisLabel}</p>
+      <p className="text-xs text-slate-500 mb-3">
+        {t
+          ? `${r.holdingYears} years of profit plus the car at the end, compounded`
+          : `based on ${basisLabel}`}
+      </p>
 
       <div className="grid grid-cols-2 gap-3">
         <Side
           label={r.leasedPct > 0 ? 'The car, on your equity' : 'The car'}
-          pct={h.returnPct === null ? '—' : `${h.returnPct}%`}
-          sub={`${money(h.monthlyProfit)}/month`}
+          pct={headlinePct === null ? '—' : `${headlinePct}%`}
+          sub={
+            t
+              ? `${money(h.monthlyProfit)}/month, then ${amount(t.resale)}`
+              : `${money(h.monthlyProfit)}/month`
+          }
           tone={tone}
-          active={h.beatsAlternative}
+          active={beats}
         />
         <Side
           label={`Fixed deposit @ ${r.ratePct}%`}
           pct={`${r.ratePct}%`}
           sub={`${money(r.monthlyAlternative)}/month`}
           tone="text-slate-300"
-          active={!h.beatsAlternative}
+          active={!beats}
         />
       </div>
 
@@ -110,6 +126,53 @@ export default function ReturnOnCapital({ summary }) {
           </dd>
         </div>
       </dl>
+
+      {/* The total-return arithmetic, undiscounted, so the compounded headline
+          above can be checked against plain sums. */}
+      {t && (
+        <div className="mt-4 pt-3 border-t border-ink-800">
+          <div className="label mb-2">Over {r.holdingYears} years</div>
+          <dl className="space-y-1.5">
+            <Row
+              label="Profit"
+              hint={`${amount(h.monthlyProfit)} × ${t.months} months`}
+              value={amount(h.monthlyProfit * t.months)}
+            />
+            <Row
+              label="Car sold at the end"
+              hint="owned outright once the lease is paid"
+              value={amount(t.resale)}
+            />
+            <div className="flex items-baseline justify-between gap-4 border-t border-ink-800 pt-2 mt-2">
+              <dt className="text-sm font-medium text-slate-300">
+                Back on {amount(r.equity)} put in
+                <span className="block text-xs text-slate-600">
+                  <span className="num">{t.multiple}×</span> your money
+                </span>
+              </dt>
+              <dd className="num text-lg text-accent">{money(t.totalCash)}</dd>
+            </div>
+          </dl>
+
+          {/* The resale figure is an estimate five years out, so show what
+              being wrong about it is worth before anyone banks the headline. */}
+          {t.sensitivity.length > 1 && (
+            <p className="text-xs text-slate-500 mt-3">
+              If it fetches{' '}
+              {t.sensitivity.map((sv, i) => (
+                <span key={sv.resale}>
+                  {i > 0 && ' / '}
+                  <span className="num">{amount(sv.resale)}</span> →{' '}
+                  <span className={sv.resale === t.resale ? 'num text-slate-300' : 'num'}>
+                    {sv.annualPct}%
+                  </span>
+                </span>
+              ))}
+              .
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Expiring costs, so the levelling is visible rather than magic. */}
       {r.levelised && (
@@ -158,9 +221,11 @@ export default function ReturnOnCapital({ summary }) {
       )}
 
       <p className="text-xs text-slate-500 mt-2">
-        {h.beatsAlternative
+        {beats
           ? `Over ${r.holdingYears} years at this rate the car beats a ${r.ratePct}% deposit.`
           : `Over ${r.holdingYears} years at this rate the capital would still earn more in a ${r.ratePct}% deposit.`}
+        {!t &&
+          ' Add an expected resale value under Settings to include the car you still own at the end.'}
       </p>
     </div>
   );

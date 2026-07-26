@@ -36,6 +36,11 @@ export const DEFAULT_SETTINGS = {
   leasedPercent: 0,
   /** How long the vehicle will be run, for levelised return on capital. */
   holdingYears: 5,
+  // What the vehicle is expected to fetch at the end of the holding period.
+  // Entered instead of a depreciation cost line: the lease is paid in full out
+  // of profit, and what that buys is a car you own outright at the end. Booking
+  // depreciation as well would charge for the same loss of value twice.
+  resaleValue: null,
 };
 
 /**
