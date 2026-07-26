@@ -197,6 +197,22 @@ export default function ReturnOnCapital({ summary }) {
         </div>
       )}
 
+      {/* The two profit figures on this dashboard differ, and the difference is
+          entirely the levelling above. Saying so here saves anyone comparing
+          the two cards from assuming one of them is wrong. */}
+      {r.nextMonth && r.overHolding && (
+        <p className="text-xs text-slate-500 mt-3">
+          Next month's card shows{' '}
+          <span className="num">{money(r.nextMonth.monthlyProfit)}</span> profit; this card averages{' '}
+          <span className="num">{money(r.overHolding.monthlyProfit)}</span>. The difference is{' '}
+          <span className="num">
+            {amount(Math.abs(r.overHolding.monthlyProfit - r.nextMonth.monthlyProfit))}
+          </span>{' '}
+          a month of costs that stop before the {r.holdingYears} years are up — next month pays
+          them in full, the average does not.
+        </p>
+      )}
+
       {/* Single months, for contrast — shown but not led on. */}
       <p className="text-xs text-slate-600 mt-3">
         {r.nextMonth && (
