@@ -22,11 +22,11 @@ export default function RunningCosts({ summary }) {
     <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
         <h2 className="label">Running costs &amp; profit</h2>
-        <span className="text-xs text-slate-500">owner only</span>
+        <span className="text-xs text-slate-400">owner only</span>
       </div>
 
       {costs.items.length === 0 ? (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-400">
           No costs recorded. Add them under Settings to see what the car actually leaves you.
         </p>
       ) : (
@@ -35,11 +35,14 @@ export default function RunningCosts({ summary }) {
             <div key={c.id} className="flex items-baseline justify-between gap-4">
               <dt className="text-sm text-slate-400">
                 {c.label}
-                <span className="text-xs text-slate-600 ml-2">
+                <span className="text-xs text-slate-400 ml-2">
                   {categoryLabel(c.category)}
                   {c.frequency === 'annual' && ' · yearly ÷ 12'}
                   {c.frequency === 'once' && ' · one-off'}
-                  {c.basis && ` · ${amount(c.amount)} × ${c.basis}`}
+                  {/* "2,600 × 25 days" for a rate the ledger multiplies out;
+                      just the basis for a line that is already an actual, like
+                      charging once sessions have been logged. */}
+                  {c.basis && (c.amount ? ` · ${amount(c.amount)} × ${c.basis}` : ` · ${c.basis}`)}
                   {c.remaining !== null && c.remaining !== undefined && ` · ${c.remaining} left`}
                 </span>
               </dt>
@@ -51,12 +54,34 @@ export default function RunningCosts({ summary }) {
 
       <dl className="mt-3 pt-3 border-t border-ink-800 space-y-1.5">
         {summary.uberFees && summary.uberFees.toDate !== 0 && (
-          <Row
-            label={summary.uberFees.toDate < 0 ? 'Uber charges' : 'Uber refunds'}
-            hint="subscriptions, fees and refunds — never charged to the driver"
-            value={amount(summary.uberFees.toDate)}
-            tone={summary.uberFees.toDate < 0 ? 'text-warn' : 'text-accent'}
-          />
+          <>
+            {/* Itemised: the subscription is most of it, and the rest is small
+                fees and reimbursements that a single net figure hides. */}
+            {(summary.uberFees.lines || []).map((line) => (
+              <Row
+                key={line.label}
+                label={line.label}
+                hint={line.kind === 'refund' ? 'refunded by Uber' : "Uber's charge"}
+                value={amount(line.amount)}
+                tone={line.amount < 0 ? 'text-warn' : 'text-slate-100'}
+              />
+            ))}
+            <Row
+              label={summary.uberFees.toDate < 0 ? 'Uber charges, net' : 'Uber refunds, net'}
+              hint="never charged to the driver"
+              value={amount(summary.uberFees.toDate)}
+              tone={summary.uberFees.toDate < 0 ? 'text-warn' : 'text-slate-100'}
+            />
+            {(summary.uberFees.taxes || []).map((tax) => (
+              <Row
+                key={tax.label}
+                label={tax.label}
+                hint="already deducted inside revenue"
+                value={amount(tax.amount)}
+                tone="text-slate-400"
+              />
+            ))}
+          </>
         )}
         {costs.chargingPerKm !== null && costs.chargingPerKm !== undefined && (
           <Row
@@ -79,7 +104,7 @@ export default function RunningCosts({ summary }) {
           <dt className="text-sm font-medium text-slate-300">
             {loss ? 'Shortfall this month' : 'Profit this month'}
           </dt>
-          <dd className={`num text-lg ${loss ? 'text-danger' : 'text-accent'}`}>
+          <dd className={`num text-lg ${loss ? 'text-danger' : 'text-slate-50'}`}>
             {money(ownerProfit)}
           </dd>
         </div>
@@ -108,7 +133,7 @@ function Row({ label, hint, value, tone = 'text-slate-200' }) {
     <div className="flex items-baseline justify-between gap-4">
       <dt className="text-sm text-slate-400">
         {label}
-        {hint && <span className="block text-xs text-slate-600">{hint}</span>}
+        {hint && <span className="block text-xs text-slate-400">{hint}</span>}
       </dt>
       <dd className={`num ${tone}`}>{value}</dd>
     </div>

@@ -64,17 +64,17 @@ export default function ChargerEditor() {
   }
 
   if (error && !rows) return <Banner>{error}</Banner>;
-  if (!rows) return <p className="text-slate-500 text-sm">Loading chargers…</p>;
+  if (!rows) return <p className="text-slate-400 text-sm">Loading chargers…</p>;
 
   return (
     <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
         <h2 className="label">Charging stations</h2>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-400">
           <span className="num">{rows.length}</span> stations · shown nearest-first on the dashboard
         </span>
       </div>
-      <p className="text-xs text-slate-500 mb-3">
+      <p className="text-xs text-slate-400 mb-3">
         Rates in LKR per kWh. Use the flat rate for operators with one price, or the three
         time-of-use bands (day / peak / off-peak). Leave blank if unknown.
       </p>
@@ -151,7 +151,7 @@ export default function ChargerEditor() {
         <button className="btn" onClick={() => setRows(DEFAULT_CHARGERS)} disabled={busy}>
           Reset to seed list
         </button>
-        {status && <span className="text-sm text-accent">{status}</span>}
+        {status && <span className="text-sm text-slate-100">{status}</span>}
       </div>
     </div>
   );
@@ -164,7 +164,7 @@ function Cell({ value, onChange, wide, muted, placeholder }) {
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
       className={`w-full px-2 py-1 text-sm ${wide ? 'min-w-[11rem]' : 'min-w-[7rem]'} ${
-        muted ? 'text-slate-500 text-xs' : ''
+        muted ? 'text-slate-400 text-xs' : ''
       }`}
     />
   );

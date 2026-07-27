@@ -26,7 +26,7 @@ export default function ReturnOnCapital({ summary }) {
     return (
       <div className="card">
         <h2 className="label mb-2">Return on capital</h2>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-400">
           Enter what the vehicle cost under Settings to compare the car against a fixed deposit.
         </p>
       </div>
@@ -48,20 +48,22 @@ export default function ReturnOnCapital({ summary }) {
   const t = r.totalReturn;
   const headlinePct = t && t.annualPct !== null ? t.annualPct : h.returnPct;
   const beats = t ? t.beatsAlternative : h.beatsAlternative;
-  const tone = beats ? 'text-accent' : 'text-danger';
+  // Green belongs to the driver's pay; the owner's return is neutral unless it
+  // is negative, which is the one thing colour still has to shout.
+  const tone = beats ? 'text-slate-50' : 'text-danger';
 
   return (
     <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
         <h2 className="label">Return on capital</h2>
-        <span className="text-xs text-slate-500">owner only</span>
+        <span className="text-xs text-slate-400">owner only</span>
       </div>
-      <p className="text-xs text-slate-500 mb-3">
+      <p className="text-xs text-slate-400 mb-3">
         {t
           ? `${r.holdingYears} years of profit plus the car at the end, compounded`
           : `based on ${basisLabel}`}
         {r.holdingStart && (
-          <span className="block text-slate-600">
+          <span className="block text-slate-400">
             {monthLabel(`${r.holdingStart}-01`)} – {monthLabel(`${r.holdingEnd}-01`)}, counted from
             when the money went in
           </span>
@@ -97,7 +99,7 @@ export default function ReturnOnCapital({ summary }) {
               label={`Leased (${r.leasedPct}%)`}
               hint="the financier's money — paid for by the instalment"
               value={amount(r.leased)}
-              tone="text-slate-500"
+              tone="text-slate-400"
             />
             <Row label="Your own money in it" value={amount(r.equity)} />
           </>
@@ -125,9 +127,9 @@ export default function ReturnOnCapital({ summary }) {
         <div className="flex items-baseline justify-between gap-4 border-t border-ink-800 pt-2 mt-2">
           <dt className="text-sm font-medium text-slate-300">
             Versus leaving it in the bank
-            <span className="block text-xs text-slate-600">per month</span>
+            <span className="block text-xs text-slate-400">per month</span>
           </dt>
-          <dd className={`num text-lg ${h.economicProfit < 0 ? 'text-danger' : 'text-accent'}`}>
+          <dd className={`num text-lg ${h.economicProfit < 0 ? 'text-danger' : 'text-slate-50'}`}>
             {money(h.economicProfit)}
           </dd>
         </div>
@@ -152,18 +154,18 @@ export default function ReturnOnCapital({ summary }) {
             <div className="flex items-baseline justify-between gap-4 border-t border-ink-800 pt-2 mt-2">
               <dt className="text-sm font-medium text-slate-300">
                 Back on {amount(r.equity)} put in
-                <span className="block text-xs text-slate-600">
+                <span className="block text-xs text-slate-400">
                   <span className="num">{t.multiple}×</span> your money
                 </span>
               </dt>
-              <dd className="num text-lg text-accent">{money(t.totalCash)}</dd>
+              <dd className="num text-lg text-slate-50">{money(t.totalCash)}</dd>
             </div>
           </dl>
 
           {/* The resale figure is an estimate five years out, so show what
               being wrong about it is worth before anyone banks the headline. */}
           {t.sensitivity.length > 1 && (
-            <p className="text-xs text-slate-500 mt-3">
+            <p className="text-xs text-slate-400 mt-3">
               If it fetches{' '}
               {t.sensitivity.map((sv, i) => (
                 <span key={sv.resale}>
@@ -185,14 +187,14 @@ export default function ReturnOnCapital({ summary }) {
         <div className="mt-3 pt-3 border-t border-ink-800">
           <div className="label mb-2">Costs that end</div>
           {r.levelised.items.filter((i) => i.months < r.horizonMonths).length === 0 ? (
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-400">
               None — every cost runs for the whole {r.holdingYears} years.
             </p>
           ) : (
             r.levelised.items
               .filter((i) => i.months < r.horizonMonths)
               .map((i) => (
-                <p key={i.id} className="text-xs text-slate-500">
+                <p key={i.id} className="text-xs text-slate-400">
                   {i.label}: <span className="num">{amount(i.amount)}</span>/month for{' '}
                   <span className="num">{i.months}</span> more months — counted as{' '}
                   <span className="num text-slate-300">{amount(i.levelised)}</span>/month across the{' '}
@@ -208,7 +210,7 @@ export default function ReturnOnCapital({ summary }) {
           the two cards from assuming one of them is wrong. */}
       {r.nextMonth && r.overHolding &&
         Math.abs(r.overHolding.monthlyProfit - r.nextMonth.monthlyProfit) >= 0.01 && (
-        <p className="text-xs text-slate-500 mt-3">
+        <p className="text-xs text-slate-400 mt-3">
           Next month's card shows{' '}
           <span className="num">{money(r.nextMonth.monthlyProfit)}</span> profit; this card averages{' '}
           <span className="num">{money(r.overHolding.monthlyProfit)}</span>. The difference is{' '}
@@ -221,7 +223,7 @@ export default function ReturnOnCapital({ summary }) {
         )}
 
       {/* Single months, for contrast — shown but not led on. */}
-      <p className="text-xs text-slate-600 mt-3">
+      <p className="text-xs text-slate-400 mt-3">
         {r.nextMonth && (
           <>
             Next month's cash alone, without counting the car at the end, returns{' '}
@@ -237,13 +239,13 @@ export default function ReturnOnCapital({ summary }) {
       </p>
 
       {r.leasedPct > 0 && (
-        <p className="text-xs text-slate-500 mt-2">
+        <p className="text-xs text-slate-400 mt-2">
           Interest is charged only on the <span className="num">{amount(r.equity)}</span> you put
           in. The leased {r.leasedPct}% costs you the instalment, already counted in running costs.
         </p>
       )}
 
-      <p className="text-xs text-slate-500 mt-2">
+      <p className="text-xs text-slate-400 mt-2">
         {beats
           ? `Over ${r.holdingYears} years at this rate the car beats a ${r.ratePct}% deposit.`
           : `Over ${r.holdingYears} years at this rate the capital would still earn more in a ${r.ratePct}% deposit.`}
@@ -258,12 +260,12 @@ function Side({ label, pct, sub, tone, active }) {
   return (
     <div
       className={`rounded-md border px-3 py-2 ${
-        active ? 'border-accent/40 bg-accent/5' : 'border-ink-700 bg-ink-950/40'
+        active ? 'border-slate-400/60 bg-slate-400/5' : 'border-ink-700 bg-ink-950/40'
       }`}
     >
       <div className="label">{label}</div>
       <div className={`num text-xl mt-1 ${tone}`}>{pct}</div>
-      <div className="num text-xs text-slate-500 mt-0.5">{sub}</div>
+      <div className="num text-xs text-slate-400 mt-0.5">{sub}</div>
     </div>
   );
 }
@@ -273,7 +275,7 @@ function Row({ label, hint, value, tone = 'text-slate-200' }) {
     <div className="flex items-baseline justify-between gap-4">
       <dt className="text-sm text-slate-400">
         {label}
-        {hint && <span className="block text-xs text-slate-600">{hint}</span>}
+        {hint && <span className="block text-xs text-slate-400">{hint}</span>}
       </dt>
       <dd className={`num ${tone}`}>{value}</dd>
     </div>

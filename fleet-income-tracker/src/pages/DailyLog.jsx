@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api.js';
-import { amount, count, dayLabel, todayLocal } from '../format.js';
+import { amount, count, dayLabel, todayLocal, amountExact } from '../format.js';
 import MonthNav from '../components/MonthNav.jsx';
 import CsvImport from '../components/CsvImport.jsx';
 import Spinner, { Refreshing } from '../components/Spinner.jsx';
 import DaysOff from '../components/DaysOff.jsx';
+import ChargeLog from '../components/ChargeLog.jsx';
 
 const EMPTY = { date: '', revenue: '', trips: '', uberKm: '', gpsKm: '', cashCollected: '' };
 
@@ -105,9 +106,15 @@ export default function DailyLog({ month, setMonth, isOwner }) {
         </p>
       )}
 
-      {/* Marking days off is the one write the driver may make, so it sits
-          outside the owner-only column. */}
+      {/* The two writes the driver may make sit outside the owner-only column:
+          marking a day off, and logging what he paid to charge. Both are records
+          only he can make — he is the one not driving, and the one at the
+          charger. Neither touches the revenue record. */}
       <DaysOff entries={entries} month={month} onChange={() => load({ silent: true })} />
+
+      <div className="mt-5">
+        <ChargeLog entries={entries} onSaved={() => load({ silent: true })} />
+      </div>
 
       <div className={`grid gap-5 mt-5 ${isOwner ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
         {/* Writing is owner-only; the API refuses the driver regardless. */}
@@ -153,7 +160,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
         <div className={`card overflow-x-auto ${isOwner ? 'lg:col-span-2' : ''}`}>
           <div className="flex items-baseline justify-between mb-3">
             <h2 className="label">Entries</h2>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-slate-400">
               {loading ? (
                 'loading…'
               ) : (
@@ -168,7 +175,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
           {loading ? (
             <Spinner label="Loading entries…" />
           ) : entries.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">
+            <p className="text-sm text-slate-400 py-6 text-center">
               {isOwner
                 ? 'No entries this month yet. Add one, or import a CSV.'
                 : 'No entries recorded for this month.'}
@@ -184,6 +191,7 @@ export default function DailyLog({ month, setMonth, isOwner }) {
                   <th className="th text-right">Trips</th>
                   <th className="th text-right">Uber km</th>
                   <th className="th text-right">GPS km</th>
+                  <th className="th text-right">Charging</th>
                   <th className="th">Src</th>
                   {isOwner && <th className="th"></th>}
                 </tr>
@@ -199,20 +207,30 @@ export default function DailyLog({ month, setMonth, isOwner }) {
                     <td className="td num whitespace-nowrap">
                       {dayLabel(e.date)}
                       {e.offDay && (
-                        <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-500 border border-ink-700 rounded px-1 whitespace-nowrap">
+                        <span className="ml-2 text-[11px] uppercase text-slate-400 border border-ink-700 rounded px-1 whitespace-nowrap">
                           day off
                         </span>
                       )}
                     </td>
                     <td className="td num text-right text-slate-100">{amount(e.revenue)}</td>
                     <td className="td num text-right text-warn/90">
-                      {e.cashCollected == null ? '—' : amount(e.cashCollected)}
+                      {/* Cash is a handover that has to reconcile to the cent —
+                          the one column here that keeps its decimals. */}
+                      {e.cashCollected == null ? '—' : amountExact(e.cashCollected)}
                     </td>
                     <td className="td num text-right">{e.trips ?? '—'}</td>
                     <td className="td num text-right">{e.uberKm ?? '—'}</td>
                     <td className="td num text-right">{e.gpsKm ?? '—'}</td>
+                    {/* Logged sessions only. A day with none falls back to the
+                        configured rate on the dashboard and is marked estimated
+                        there; here, blank means nobody logged it. */}
+                    <td className="td num text-right text-warn/90">
+                      {(e.chargeSessions || []).length
+                        ? amount(e.chargeSessions.reduce((sum, x) => sum + (Number(x.amount) || 0), 0))
+                        : '—'}
+                    </td>
                     <td className="td">
-                      <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-ink-800 text-slate-400">
+                      <span className="text-[11px] uppercase px-1.5 py-0.5 rounded bg-ink-800 text-slate-400">
                         {e.source}
                       </span>
                     </td>

@@ -1,17 +1,24 @@
 import { money, amount, count } from '../format.js';
+import { displayThreshold, perDayThreshold } from '../display.js';
+import MarginalRates from './MarginalRates.jsx';
 
 /**
- * What it would take to reach the next tier, framed to motivate.
+ * What it would take to reach the next tier, framed to motivate. The owner's
+ * copy of the driver's ask — his own view leads with the same number at hero
+ * size, so this stays where the owner reads it.
  *
  * Three deliberate choices:
  *
  * 1. The headline is in TRIPS, not rupees. Trips are what the driver controls;
  *    "23,870 more revenue" is an abstraction, "2 more trips a day" is a shift
  *    he can picture.
- * 2. The prize is his take-home, never gross revenue or the owner's share.
+ * 2. The prize is his take-home, never gross revenue or the owner's share — and
+ *    it is the only figure in the card allowed to be green.
  * 3. The marginal rate is shown, because it is the strongest argument the plan
- *    contains and it is otherwise invisible: crossing into the top tier doubles
- *    what every further rupee is worth to him.
+ *    contains and it is otherwise invisible.
+ *
+ * Every threshold quoted here goes through `displayThreshold`, so the card, the
+ * ladder axis and the driver's screen cannot disagree about where the line is.
  *
  * Below the band the marginal rate is genuinely zero, which is demoralising
  * stated plainly on day three. It is framed as a gate to unlock rather than a
@@ -21,11 +28,14 @@ export default function PushToTier({ summary }) {
   const p = summary.push;
   if (!p) return null;
 
+  const days = summary.operatingDays || summary.daysInMonth || 31;
+  const end = displayThreshold(p.bandEnd);
+
   if (p.reached) {
     return (
       <div className="card border border-accent/30">
         <h2 className="label mb-2">Top tier reached</h2>
-        <p className="text-sm text-slate-300">
+        <p className="text-sm text-slate-200">
           You are in the top tier — you now keep{' '}
           <span className="num text-accent">{Math.round(p.topRate * 100)}%</span> of everything you
           earn from here, <span className="num">{count(1000 * p.topRate)}</span> of every{' '}
@@ -36,6 +46,7 @@ export default function PushToTier({ summary }) {
   }
 
   const goingForTop = p.tier === 'top';
+  const target = displayThreshold(p.target);
   // On track is not the same as arrived. The pace forecasts a finish past the
   // threshold, but the money is not earned yet and the higher rate is not being
   // paid yet, so this state encourages holding the pace rather than
@@ -49,151 +60,74 @@ export default function PushToTier({ summary }) {
       : 'Unlock tier 2';
 
   return (
-    <div className="card border border-accent/30">
+    <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
-        <h2 className="label text-accent">{title}</h2>
-        <span className="text-xs text-slate-500">
-          <span className="num">{p.daysLeft}</span> day{p.daysLeft === 1 ? '' : 's'} left
+        <h2 className="label">{title}</h2>
+        <span className="text-xs text-slate-400">
+          <span className="num">{p.daysLeft}</span> more shift{p.daysLeft === 1 ? '' : 's'}
         </span>
       </div>
 
-      {/* On track: a pace to hold, not a shortfall to make up. */}
-      {p.onTrack ? (
-        <>
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="num text-2xl text-accent">{amount(p.catchUpDaily || 0)}</span>
-            <span className="text-slate-300">a day keeps you there</span>
-            <span className="text-slate-500 text-sm">
-              — over the last <span className="num">{p.daysLeft}</span> day
-              {p.daysLeft === 1 ? '' : 's'}, to finish on{' '}
-              <span className="num">{amount(p.target)}</span>
-            </span>
-          </div>
-          <p className="text-sm text-slate-300 mt-3">
-            Not banked yet: you are on <span className="num">{amount(p.revenue)}</span>, so there
-            is still <span className="num text-accent">{amount(p.remainingToTarget)}</span> to
-            earn before you cross{' '}
-            <span className="num">{amount(p.bandEnd)}</span> and start keeping{' '}
-            <span className="num text-accent">{Math.round(p.topRate * 100)}%</span>.
-          </p>
-        </>
-      ) : (
-      <>
-      {/* The ask, in the unit he controls. */}
+      {/* The ask. Revenue to drive, so it is neutral — the money is below. */}
       <div className="flex items-baseline gap-2 flex-wrap">
-        {p.extraTripsPerDay >= 1 ? (
+        {p.onTrack || !(p.extraTripsPerDay >= 1) ? (
           <>
-            <span className="num text-2xl text-accent">+{p.extraTripsPerDay}</span>
-            <span className="text-slate-300">trips a day</span>
+            <span className="num text-2xl text-slate-50">{amount(p.catchUpDaily || 0)}</span>
+            <span className="text-slate-200">a day{p.onTrack ? ' keeps you there' : ''}</span>
           </>
         ) : (
           <>
-            <span className="num text-2xl text-accent">+{amount(p.extraPerDay || 0)}</span>
-            <span className="text-slate-300">a day</span>
+            <span className="num text-2xl text-slate-50">+{p.extraTripsPerDay}</span>
+            <span className="text-slate-200">trips a day</span>
           </>
         )}
-        <span className="text-slate-500 text-sm">
-          — about <span className="num">{amount(p.catchUpDaily || 0)}</span>/day, to finish the
-          month on <span className="num">{amount(p.target)}</span>
-        </span>
       </div>
 
-      {/* The prize, in his money. Reaching a threshold EXACTLY pays nothing
-          extra — the band pays a share of what is above it — so when the gain
-          is zero, say what the rate unlocks instead of offering "LKR 0.00". */}
-      <p className="text-sm text-slate-300 mt-3">
-        {p.payGain > 0 ? (
-          <>
-            Worth <span className="num text-accent">{money(p.payGain)}</span> more in your pocket
-            this month
-            {p.payGainPct ? (
-              <span className="text-slate-500"> — a {p.payGainPct}% rise on {money(p.payNow)}</span>
-            ) : null}
-            .
-          </>
-        ) : (
-          <>
-            Get past it and you start keeping{' '}
-            <span className="num text-accent">{Math.round(p.marginalNext * 100)}%</span> of
-            everything you earn after that —{' '}
-            <span className="num">{count(1000 * p.marginalNext)}</span> of every{' '}
-            <span className="num">{count(1000)}</span>.
-          </>
+      {/* Figures live in rows, not in sentences. The old copy ran "you are on X,
+          so there is still Y to earn before you cross Z and start keeping W%" —
+          four numbers in one breath, none of them findable again. */}
+      <dl className="mt-3 space-y-2 border-t border-ink-700 pt-3">
+        <Row label={goingForTop ? 'To tier 3' : 'To tier 2'} value={money(p.remainingToTarget)} tone="text-warn" />
+        <Row
+          label={goingForTop ? 'Tier 3 starts at' : 'Tier 2 starts at'}
+          hint={`${amount(perDayThreshold(target, days))} a shift`}
+          value={amount(target)}
+        />
+        <Row label="Earned so far" value={amount(p.revenue)} />
+        {p.payGain > 0 && (
+          <Row
+            label="Extra in your pocket"
+            hint={p.payGainPct ? `${p.payGainPct}% on ${money(p.payNow)}` : undefined}
+            value={money(p.payGain)}
+            tone="text-accent"
+          />
         )}
-      </p>
-      </>
-      )}
+        {!(p.payGain > 0) && (
+          <Row
+            label="Then you keep"
+            hint={`${count(1000 * p.marginalNext)} of every ${count(1000)} after that`}
+            value={`${Math.round(p.marginalNext * 100)}%`}
+            tone="text-accent"
+          />
+        )}
+      </dl>
 
       {/* Why it is worth it: what the next rupee earns, now and after. */}
-      <div className="mt-4">
-        <div className="label mb-2">How much of every extra rupee you keep</div>
-        <div className="flex gap-1">
-          <Zone
-            active={p.marginalNow === 0}
-            tone="slate"
-            pct="0%"
-            per={`nothing extra yet`}
-            range={`below ${short(p.bandStart)}`}
-          />
-          <Zone
-            active={p.marginalNow === p.bandRate}
-            tone="warn"
-            pct={`${Math.round(p.bandRate * 100)}%`}
-            per={`${count(1000 * p.bandRate)} per ${count(1000)}`}
-            range={`${short(p.bandStart)}–${short(p.bandEnd)}`}
-          />
-          <Zone
-            active={p.marginalNow === p.topRate}
-            tone="accent"
-            pct={`${Math.round(p.topRate * 100)}%`}
-            per={`${count(1000 * p.topRate)} per ${count(1000)}`}
-            range={`above ${short(p.bandEnd)}`}
-          />
-        </div>
-        <p className="text-xs text-slate-500 mt-2">
-          {goingForTop ? (
-            <>
-              Past <span className="num">{amount(p.bandEnd)}</span> every rupee you earn is worth{' '}
-              <span className="text-accent">
-                {Math.round((p.topRate / p.bandRate) * 10) / 10}× more
-              </span>{' '}
-              to you than it is right now.
-            </>
-          ) : (
-            <>
-              <span className="num">{amount(p.onTrack ? p.remainingToTarget : p.gap)}</span> more
-              this month and you start keeping{' '}
-              <span className="text-warn">{Math.round(p.bandRate * 100)}%</span> of everything
-              above it.
-            </>
-          )}
-        </p>
+      <div className="mt-4 border-t border-ink-700 pt-4">
+        <MarginalRates summary={summary} />
       </div>
     </div>
   );
 }
 
-function Zone({ active, tone, pct, per, range }) {
-  const tones = {
-    slate: 'border-ink-700 text-slate-500',
-    warn: 'border-warn/40 text-warn',
-    accent: 'border-accent/40 text-accent',
-  };
-  const fills = { slate: 'bg-ink-800/60', warn: 'bg-warn/10', accent: 'bg-accent/10' };
+function Row({ label, hint, value, tone = 'text-slate-100' }) {
   return (
-    <div
-      className={`flex-1 rounded-md border px-2 py-2 text-center ${tones[tone]} ${
-        active ? `${fills[tone]} ring-1 ring-inset ring-current` : 'opacity-55'
-      }`}
-    >
-      <div className="num text-base font-semibold">{pct}</div>
-      <div className="text-[10px] text-slate-400 mt-0.5 num">{per}</div>
-      <div className="text-[10px] text-slate-600 mt-0.5">{range}</div>
-      {active && <div className="text-[10px] mt-1 font-medium">you are here</div>}
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="text-sm text-slate-300 min-w-0">
+        {label}
+        {hint && <span className="block text-xs text-slate-400 num">{hint}</span>}
+      </dt>
+      <dd className={`num shrink-0 ${tone}`}>{value}</dd>
     </div>
   );
-}
-
-function short(v) {
-  return v >= 1000 ? `${Math.round(v / 1000)}k` : String(Math.round(v));
 }

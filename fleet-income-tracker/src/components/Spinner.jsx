@@ -7,7 +7,7 @@
  */
 export default function Spinner({ label = 'Loading…', className = '' }) {
   return (
-    <div className={`flex items-center justify-center gap-3 py-8 text-slate-500 ${className}`}>
+    <div className={`flex items-center justify-center gap-3 py-8 text-slate-400 ${className}`}>
       <span
         className="inline-block w-4 h-4 rounded-full border-2 border-ink-600 border-t-accent animate-spin"
         role="status"

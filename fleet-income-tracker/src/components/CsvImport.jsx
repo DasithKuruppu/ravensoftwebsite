@@ -9,6 +9,8 @@ import {
   guessColumn,
   looksDateLike,
   feeColumns,
+  taxColumns,
+  feeLineItems,
   rememberTripStarts,
   resolveRowDate,
   rowFees,
@@ -178,6 +180,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
       // Uber's own charges and refunds, spread across a column per type. Summed
       // rather than mapped, because there is no single column to point at.
       const feeCols = feeColumns(headers);
+      const taxCols = taxColumns(headers);
       let feeTotal = 0;
       let feeRows = 0;
 
@@ -201,6 +204,10 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
             uberKm: mapping.uberKm ? r[mapping.uberKm] : undefined,
             cashCollected: mapping.cashCollected ? r[mapping.cashCollected] : undefined,
             uberFees: fees,
+            // The same charges, itemised, so the dashboard can say what Uber
+            // billed for rather than only how much.
+            uberFeeLines: feeCols.length ? feeLineItems(r, feeCols) : undefined,
+            uberTaxLines: taxCols.length ? feeLineItems(r, taxCols) : undefined,
           };
         })
         .filter((r) => r.date);
@@ -270,7 +277,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
       <input type="file" accept=".csv,text/csv" onChange={handleFile} />
 
       {fileName && rows && (
-        <p className="text-xs text-slate-500 mt-2">
+        <p className="text-xs text-slate-400 mt-2">
           {fileName} · <span className="num">{count(rows.length)}</span> rows ·{' '}
           <span className="num">{headers.length}</span> columns
         </p>
@@ -283,7 +290,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
       )}
 
       {status && (
-        <p className="text-sm text-accent bg-accent/10 border border-accent/20 rounded-md px-3 py-2 mt-3">
+        <p className="text-sm text-slate-100 bg-ink-800 border border-ink-600 rounded-md px-3 py-2 mt-3">
           Imported <span className="num">{count(status.imported)}</span> day(s) from{' '}
           <span className="num">{count(status.total)}</span> rows
           {status.excluded > 0 && ` · ${status.excluded} cancelled trip(s) excluded`}
@@ -329,7 +336,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
               that problem, provided the trip activity export has been imported
               to teach us when the trip began. */}
           {mapping.tripId && !misdatingRisk && knownTripIds > 0 && (
-            <p className="text-xs text-slate-500 mb-3">
+            <p className="text-xs text-slate-400 mb-3">
               <span className="num">{count(knownTripIds)}</span> of{' '}
               <span className="num">{count(rows.length)}</span> rows match a known trip and will be
               dated by when that trip started, not by this file's timestamp.
@@ -345,7 +352,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
                 posted the money — after the trip ended. A trip running past midnight would have
                 its fare filed under the following day.
               </p>
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-slate-400 mt-2">
                 <span className="num">{count(misdatedRows)}</span> of{' '}
                 <span className="num">{count(rows.length)}</span> rows carry money for a trip with
                 no known start time. Import the trip activity report covering these dates, then
@@ -400,7 +407,7 @@ export default function CsvImport({ savedMapping, onSaveMapping, onImported, can
                   onChange={(e) => setFallbackDate(e.target.value)}
                 />
               </div>
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-slate-400 mt-2">
                 Export one day at a time so each file lands on its own date. A multi-day
                 export would be written as a single lump sum on this date.
               </p>

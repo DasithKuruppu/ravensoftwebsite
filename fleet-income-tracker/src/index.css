@@ -14,10 +14,12 @@
     @apply font-mono tabular-nums;
     font-variant-numeric: tabular-nums;
   }
+  /* Focus is a neutral highlight, not green: green means the driver's money and
+     nothing else, and a text box is not money. */
   input,
   select {
     @apply bg-ink-900 border border-ink-700 rounded-md px-3 py-2 text-slate-100
-           outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/30;
+           outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400/40;
   }
   input[type='file'] {
     @apply py-1.5 text-sm file:mr-3 file:rounded file:border-0 file:bg-ink-700
@@ -29,22 +31,27 @@
   .card {
     @apply bg-ink-900 border border-ink-800 rounded-xl p-5;
   }
+  /* Microlabels used to be 12px letterspaced all-caps in slate-500, which is
+     3.9:1 on this background — under AA at any size. Sentence case in slate-400
+     is 7:1, and dropping the tracking makes the same width hold more label. */
   .label {
-    @apply text-xs uppercase tracking-wider text-slate-500;
+    @apply text-xs font-medium text-slate-400;
   }
   .btn {
     @apply px-3 py-2 rounded-md text-sm font-medium transition-colors
            bg-ink-800 hover:bg-ink-700 border border-ink-700 disabled:opacity-40
            disabled:cursor-not-allowed;
   }
+  /* Neutral, not green. Buttons are chrome; the colour contract keeps green for
+     money the driver keeps. */
   .btn-primary {
-    @apply bg-accent-dim hover:bg-accent text-ink-950 border-transparent font-semibold;
+    @apply bg-slate-200 hover:bg-white text-ink-950 border-transparent font-semibold;
   }
   .btn-danger {
     @apply text-danger hover:bg-danger/10 border-danger/30;
   }
   .th {
-    @apply text-left text-xs uppercase tracking-wider text-slate-500 font-medium px-3 py-2;
+    @apply text-left text-xs text-slate-400 font-medium px-3 py-2;
   }
   .td {
     @apply px-3 py-2 border-t border-ink-800;

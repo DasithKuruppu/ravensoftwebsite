@@ -7,14 +7,48 @@ const lkr = new Intl.NumberFormat('en-LK', {
 
 const plain = new Intl.NumberFormat('en-LK', { maximumFractionDigits: 0 });
 
-/** "LKR 121,394.60" — non-breaking space so the unit never wraps off its number. */
+/**
+ * Money is shown in whole rupees.
+ *
+ * Nobody drives for sixty cents, and "121,394.60" spends two glyphs of
+ * precision that nothing on the dashboard can act on while making every figure
+ * slower to read. The cents survive only where they actually settle — cash the
+ * driver is holding and has to hand over, and the owner's reconciliation views
+ * — which call `moneyExact` / `amountExact` instead. The rounding is
+ * display-only: every calculation still runs on the exact value, and this is
+ * the last step before the glass.
+ */
+
+/** "LKR 121,395" — non-breaking space so the unit never wraps off its number. */
 export function money(n) {
+  if (n === null || n === undefined || Number.isNaN(n)) return 'LKR\u00a0—';
+  return `LKR\u00a0${plain.format(n)}`;
+}
+
+/** "121,395" — for table cells where the LKR prefix would be noise. */
+export function amount(n) {
+  if (n === null || n === undefined || Number.isNaN(n)) return '—';
+  return plain.format(n);
+}
+
+/** "LKR 121,394.60" — settlement and reconciliation only. */
+export function moneyExact(n) {
   if (n === null || n === undefined || Number.isNaN(n)) return 'LKR\u00a0—';
   return `LKR\u00a0${lkr.format(n)}`;
 }
 
-/** "121,394.60" — for table cells where the LKR prefix would be noise. */
-export function amount(n) {
+/** "121,394.60" — the same, without the unit. */
+export function amountExact(n) {
+  if (n === null || n === undefined || Number.isNaN(n)) return '—';
+  return lkr.format(n);
+}
+
+/**
+ * A per-unit rate — cost per km, revenue per trip. Two decimals, because these
+ * are small numbers where the second digit is a real difference: 34.20 per km
+ * against 34.90 is 2% of a month's charging.
+ */
+export function rate(n) {
   if (n === null || n === undefined || Number.isNaN(n)) return '—';
   return lkr.format(n);
 }

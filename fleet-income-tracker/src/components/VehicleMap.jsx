@@ -125,12 +125,12 @@ export default function VehicleMap() {
 
   useEffect(() => () => mapRef.current?.remove(), []);
 
-  if (error) return <Card><p className="text-sm text-slate-500">Location unavailable — {error}</p></Card>;
-  if (!loc) return <Card><p className="text-sm text-slate-500">Locating vehicle…</p></Card>;
+  if (error) return <Card><p className="text-sm text-slate-400">Location unavailable — {error}</p></Card>;
+  if (!loc) return <Card><p className="text-sm text-slate-400">Locating vehicle…</p></Card>;
   if (!loc.available) {
     return (
       <Card>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-400">
           No position from the tracker{loc.reason ? ` — ${loc.reason}` : '.'}
         </p>
       </Card>
@@ -143,7 +143,7 @@ export default function VehicleMap() {
         <h2 className="label">
           Vehicle &amp; charging{loc.plate ? ` · ${loc.plate}` : ''}
         </h2>
-        <span className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
           <Status loc={loc} />
           <span>
             updated <Ago iso={loc.fixedAt} ageSeconds={loc.fixAgeSeconds} />
@@ -159,7 +159,7 @@ export default function VehicleMap() {
       />
 
       <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-400">
           Nearest <span className="num text-slate-300">{near.length}</span> CCS2 chargers ·
           now on <span className="text-slate-300">{TOU_BANDS[band].label.toLowerCase()}</span> rate
           ({TOU_BANDS[band].from}–{TOU_BANDS[band].to})
@@ -167,17 +167,17 @@ export default function VehicleMap() {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setConfirmedOnly((v) => !v)}
-            className={`btn text-xs px-2 py-1 mr-2 ${confirmedOnly ? 'border-accent/50 text-accent' : ''}`}
+            className={`btn text-xs px-2 py-1 mr-2 ${confirmedOnly ? 'border-slate-400 text-slate-50' : ''}`}
             title={confirmedOnly ? `${hiddenCount} station(s) hidden where CCS2 is unconfirmed` : 'Showing stations where CCS2 is not confirmed'}
           >
             {confirmedOnly ? 'CCS2 confirmed only' : 'including unconfirmed'}
           </button>
-          <span className="text-xs text-slate-500 mr-1">show</span>
+          <span className="text-xs text-slate-400 mr-1">show</span>
           {LIMIT_STEPS.map((n) => (
             <button
               key={n}
               onClick={() => setLimit(n)}
-              className={`btn text-xs px-2 py-1 ${limit === n ? 'border-accent/50 text-accent' : ''}`}
+              className={`btn text-xs px-2 py-1 ${limit === n ? 'border-slate-400 text-slate-50' : ''}`}
             >
               {n}
             </button>
@@ -207,27 +207,27 @@ export default function VehicleMap() {
                     <span>{c.name}</span>
                     {c.ccs2 !== 'confirmed' && (
                       <span
-                        className="text-[10px] uppercase tracking-wider text-warn border border-warn/40 bg-warn/10 rounded px-1"
+                        className="text-[11px] uppercase text-warn border border-warn/40 bg-warn/10 rounded px-1"
                         title="A charger exists here, but nobody has confirmed a CCS2 gun. Check before relying on it."
                       >
                         CCS2 not sure
                       </span>
                     )}
                     {cheapest && c.id === cheapest.id && (
-                      <span className="text-[10px] uppercase tracking-wider text-accent border border-accent/40 bg-accent/10 rounded px-1">
+                      <span className="text-[11px] text-slate-100 border border-slate-500 bg-slate-400/10 rounded px-1">
                         cheapest
                       </span>
                     )}
                     {c.position === 'approx' && (
                       <span
-                        className="text-[10px] uppercase tracking-wider text-slate-600 border border-ink-700 rounded px-1"
+                        className="text-[11px] uppercase text-slate-400 border border-ink-700 rounded px-1"
                         title="Charger confirmed at this branch, but the pin is the locality — can be ~1 km out"
                       >
                         approx location
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-slate-400">
                     <span className="num">{c.distanceKm}</span> km
                     {c.address ? ` · ${c.address}` : ''}
                     {c.app ? ` · ${c.app}` : ''}
@@ -236,13 +236,13 @@ export default function VehicleMap() {
                 <div className="flex items-center gap-3 shrink-0">
                   <div
                     className={`text-right rounded-md border px-2 py-1 ${
-                      rate ? rateChip(rate) : 'border-ink-700 text-slate-600'
+                      rate ? rateChip(rate) : 'border-ink-700 text-slate-400'
                     }`}
                   >
                     <div className="num text-sm font-semibold leading-tight">
                       {rate ? amount(rate) : '—'}
                     </div>
-                    <div className="text-[10px] opacity-70 leading-tight">LKR/kWh</div>
+                    <div className="text-[11px] opacity-70 leading-tight">LKR/kWh</div>
                   </div>
                   <a
                     href={directionsUrl(c.lat, c.lng)}
@@ -260,7 +260,7 @@ export default function VehicleMap() {
         </ul>
       )}
 
-      <p className="text-xs text-slate-600 mt-3">
+      <p className="text-xs text-slate-400 mt-3">
         Home charging on a D-TOU meter is{' '}
         <span className="num text-slate-400">LKR {HOME_TOU.offPeak}/kWh</span> off-peak
         ({TOU_BANDS.offPeak.from}–{TOU_BANDS.offPeak.to}) — cheaper than any public DC rate here.
@@ -285,16 +285,16 @@ function Pick({ title, tone, charger }) {
       }`}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <span className={`label ${accent ? 'text-accent' : 'text-slate-400'}`}>{title}</span>
-        <span className="num text-xs text-slate-500">{charger.distanceKm} km</span>
+        <span className={`label ${accent ? 'text-slate-100' : 'text-slate-400'}`}>{title}</span>
+        <span className="num text-xs text-slate-400">{charger.distanceKm} km</span>
       </div>
       <div className="text-sm text-slate-200 mt-1 truncate" title={charger.name}>
         {charger.name}
       </div>
       <div className="flex items-end justify-between gap-2 mt-0.5">
-        <div className={`num text-lg ${rate ? rateClass(rate) : 'text-slate-600'}`}>
+        <div className={`num text-lg ${rate ? rateClass(rate) : 'text-slate-400'}`}>
           {rate ? `LKR ${amount(rate)}` : 'rate unknown'}
-          {rate && <span className="text-xs text-slate-500"> /kWh</span>}
+          {rate && <span className="text-xs text-slate-400"> /kWh</span>}
         </div>
         {/* The point of surfacing a station is to go to it, so the action sits
             on the recommendation rather than only in the list below. */}
@@ -323,12 +323,12 @@ function rateColour(rate) {
 }
 /** Background chip for the per-row rate, same cheap→expensive scale. */
 function rateChip(rate) {
-  if (rate <= 60) return 'border-accent/40 bg-accent/10 text-accent';
+  if (rate <= 60) return 'border-slate-400/50 bg-slate-400/10 text-slate-100';
   if (rate <= 90) return 'border-warn/40 bg-warn/10 text-warn';
   return 'border-danger/40 bg-danger/10 text-danger';
 }
 function rateClass(rate) {
-  if (rate <= 60) return 'text-accent';
+  if (rate <= 60) return 'text-slate-100';
   if (rate <= 90) return 'text-warn';
   return 'text-danger';
 }
@@ -409,7 +409,7 @@ function statusText(loc) {
 
 function Chip({ tone, children, title }) {
   const tones = {
-    accent: 'text-accent border-accent/40 bg-accent/10',
+    accent: 'text-slate-100 border-slate-500 bg-slate-400/10',
     warn: 'text-warn border-warn/40 bg-warn/10',
     slate: 'text-slate-400 border-ink-700 bg-ink-800/60',
   };

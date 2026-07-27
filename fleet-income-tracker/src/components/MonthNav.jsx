@@ -1,8 +1,8 @@
 import { monthLabel, shiftMonth, currentMonth } from '../format.js';
 
-export default function MonthNav({ month, setMonth, right = null }) {
+export default function MonthNav({ month, setMonth, right = null, tight = false }) {
   return (
-    <div className="flex items-center gap-3 mb-5 flex-wrap">
+    <div className={`flex items-center gap-3 flex-wrap relative ${tight ? '' : 'mb-5'}`}>
       <div className="flex items-center gap-1">
         <button className="btn px-2.5" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">
           ‹

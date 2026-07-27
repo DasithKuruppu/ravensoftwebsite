@@ -85,7 +85,7 @@ function MobileNav({ isOwner }) {
   return (
     <nav
       className="sm:hidden fixed bottom-0 inset-x-0 z-20 border-t border-ink-800
-                 bg-ink-900/95 backdrop-blur"
+                 bg-ink-950 backdrop-blur"
       // Keep the tabs clear of the iPhone home indicator.
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
@@ -97,7 +97,7 @@ function MobileNav({ isOwner }) {
             end={t.to === '/'}
             className={({ isActive }) =>
               `flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] transition-colors ${
-                isActive ? 'text-accent' : 'text-slate-500 active:text-slate-300'
+                isActive ? 'text-slate-100' : 'text-slate-400 active:text-slate-200'
               }`
             }
           >
@@ -176,13 +176,17 @@ function Header({ role, isOwner, onLogout }) {
   const tabs = navTabs(isOwner);
 
   return (
-    <header className="border-b border-ink-800 bg-ink-900/60 backdrop-blur sticky top-0 z-10">
+    /* Opaque, and the top of the stack. It was `bg-ink-900/60`, so anything
+       scrolling underneath — the month nav, the partial-month banner — showed
+       through the bar and read as two things overlapping. z-30 keeps it above
+       every card and above the bottom tab bar. */
+    <header className="border-b border-ink-800 bg-ink-950 sticky top-0 z-30">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4 sm:gap-6">
         <button
           onClick={() => navigate('/')}
           className="font-semibold tracking-tight text-slate-100 shrink-0"
         >
-          Ravensoft<span className="text-accent"> Fleet</span>
+          Ravensoft<span className="text-slate-400"> Fleet</span>
         </button>
         {/* Desktop tabs. On phones these move to the bottom bar instead. */}
         <nav className="hidden sm:flex gap-1">
@@ -202,9 +206,11 @@ function Header({ role, isOwner, onLogout }) {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0">
-          <span className="text-[10px] sm:text-xs px-2 py-1 rounded bg-ink-800 text-slate-400 uppercase tracking-wider">
-            {role}
-          </span>
+          {/* Owner only: on the driver's own screen a badge naming him is a
+              third-person label in a view written entirely in the second. */}
+          {isOwner && (
+            <span className="text-xs px-2 py-1 rounded bg-ink-800 text-slate-300">{role}</span>
+          )}
           <button
             onClick={onLogout}
             className="text-sm text-slate-400 hover:text-slate-200 whitespace-nowrap"

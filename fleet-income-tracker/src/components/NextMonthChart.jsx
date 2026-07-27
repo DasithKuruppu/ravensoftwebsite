@@ -112,7 +112,7 @@ export default function NextMonthChart({ summary }) {
           ))}
         </span>
       </div>
-      <p className="text-xs text-slate-500 mb-3">
+      <p className="text-xs text-slate-400 mb-3">
         A full month on full bands. Each bend is a tier being reached — the flat stretch is the
         base, before the band pays anything extra.
       </p>
@@ -150,7 +150,7 @@ export default function NextMonthChart({ summary }) {
           {Math.abs(rate - defaultRate) > 1 && (
             <button
               type="button"
-              className="text-xs text-slate-500 hover:text-slate-300"
+              className="text-xs text-slate-400 hover:text-slate-300"
               onClick={() => setCustomRate(defaultRate)}
             >
               reset
@@ -276,7 +276,7 @@ export default function NextMonthChart({ summary }) {
                   className="inline-block w-3 h-[3px] rounded-sm"
                   style={{ background: COLOUR[l.key] }}
                 />
-                <span className="text-slate-500">{l.label}</span>
+                <span className="text-slate-400">{l.label}</span>
                 <span className="num text-slate-200">{amount(at(l.points, hover))}</span>
               </span>
             ))}
@@ -289,15 +289,15 @@ export default function NextMonthChart({ summary }) {
                   className="inline-block w-3 h-[3px] rounded-sm"
                   style={{ background: COLOUR[l.key] }}
                 />
-                <span className="text-slate-500">
+                <span className="text-slate-400">
                   {l.key === 'stretch' && matchesYesterday ? "your rate (yesterday's)" : l.label}
                 </span>
                 <span className="num text-slate-200">{amount(l.endPay)}</span>
-                <span className="text-slate-500">
+                <span className="text-slate-400">
                   at <span className="num">{amount(l.dailyRate)}</span>/day
                 </span>
                 {l.topDay ? (
-                  <span className="text-accent">
+                  <span className="text-slate-100">
                     · tier 3 by day <span className="num">{count(l.topDay)}</span>
                   </span>
                 ) : l.bandDay ? (
@@ -305,7 +305,7 @@ export default function NextMonthChart({ summary }) {
                     · tier 2 by day <span className="num">{count(l.bandDay)}</span>
                   </span>
                 ) : (
-                  <span className="text-slate-600">· base only</span>
+                  <span className="text-slate-400">· base only</span>
                 )}
               </span>
             ))}

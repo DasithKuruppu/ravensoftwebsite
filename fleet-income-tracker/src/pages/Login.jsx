@@ -26,9 +26,9 @@ export default function Login({ onLogin }) {
       <form onSubmit={submit} className="card w-full max-w-sm space-y-4">
         <div>
           <h1 className="text-lg font-semibold text-slate-100">
-            Ravensoft<span className="text-accent"> Fleet</span>
+            Ravensoft<span className="text-slate-400"> Fleet</span>
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Driver revenue &amp; commission tracking</p>
+          <p className="text-sm text-slate-400 mt-1">Driver revenue &amp; commission tracking</p>
         </div>
 
         <div className="space-y-3">

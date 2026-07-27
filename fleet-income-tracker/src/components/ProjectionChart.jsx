@@ -100,7 +100,7 @@ export default function ProjectionChart({ summary }) {
             ))}
         </span>
       </div>
-      <p className="text-xs text-slate-500 mb-2">
+      <p className="text-xs text-slate-400 mb-2">
         Solid to today, dashed for the rest of the month. Today's pace counts only the
         hours driven so far, so it climbs as the shift goes on.
       </p>
@@ -192,7 +192,7 @@ export default function ProjectionChart({ summary }) {
           </div>
         ) : (
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span className="text-slate-500">Month end:</span>
+            <span className="text-slate-400">Month end:</span>
             {drawable.map((sc) => (
               <Val key={sc.key} colour={COLOUR[sc.key]} label={sc.label} sc={sc} />
             ))}
@@ -289,10 +289,10 @@ function Val({ colour, label, value, sc }) {
   return (
     <span className="flex items-center gap-1.5">
       <span className="inline-block w-3 h-[3px] rounded-sm" style={{ background: colour }} />
-      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-400">{label}</span>
       <span className="num text-slate-200">{amount(pay)}</span>
       {sc && sc.dailyRate !== null && sc.dailyRate !== undefined && (
-        <span className="text-slate-500">
+        <span className="text-slate-400">
           at <span className="num">{amount(sc.dailyRate)}</span>/day
         </span>
       )}

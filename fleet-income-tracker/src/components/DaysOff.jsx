@@ -41,11 +41,11 @@ export default function DaysOff({ entries, month, onChange }) {
     <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
         <h2 className="label">Days off</h2>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-400">
           left out of the daily average and the projection
         </span>
       </div>
-      <p className="text-xs text-slate-500 mb-3">
+      <p className="text-xs text-slate-400 mb-3">
         Mark a day you were not driving so it does not count as a day with no earnings. Your
         commission targets do not change.
       </p>
@@ -90,7 +90,7 @@ export default function DaysOff({ entries, month, onChange }) {
                 onClick={() => set(e.date, false)}
                 title="Undo — count this day again"
               >
-                {dayLabel(e.date)} <span className="text-slate-500 ml-1">×</span>
+                {dayLabel(e.date)} <span className="text-slate-400 ml-1">×</span>
               </button>
             ))}
           </div>

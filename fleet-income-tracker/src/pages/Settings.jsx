@@ -48,6 +48,9 @@ export default function Settings() {
         holdingYears: Number(form.holdingYears) || 5,
         resaleValue: form.resaleValue === '' ? null : Number(form.resaleValue),
         driverName: (form.driverName || '').trim() || 'Driver',
+        payTarget: form.payTarget === '' ? null : Number(form.payTarget),
+        revenueBasis: form.revenueBasis === 'gross' ? 'gross' : 'net',
+        uberCommissionRate: Number(form.uberCommissionRate) || 0,
         base: Number(form.base),
         bandStart: Number(form.bandStart),
         bandEnd: Number(form.bandEnd),
@@ -65,7 +68,7 @@ export default function Settings() {
   }
 
   if (!form) {
-    return error ? <Banner>{error}</Banner> : <p className="text-slate-500 text-sm">Loading…</p>;
+    return error ? <Banner>{error}</Banner> : <p className="text-slate-400 text-sm">Loading…</p>;
   }
 
   // Live check against the same calc the API uses, with the *unsaved* form values.
@@ -112,8 +115,29 @@ export default function Settings() {
             onChange={(e) => setForm({ ...form, driverName: e.target.value })}
             placeholder="Driver"
           />
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-400">
             Used throughout the app, and accepted as a sign-in name as well as “driver”.
+          </p>
+        </div>
+
+        <div className="grid gap-1 max-w-xs">
+          <label className="label" htmlFor="payTarget">
+            Driver's monthly take-home goal (LKR)
+          </label>
+          <input
+            id="payTarget"
+            type="number"
+            step="5000"
+            min="0"
+            className="num"
+            value={form.payTarget ?? ''}
+            onChange={(e) => setForm({ ...form, payTarget: e.target.value })}
+          />
+          <p className="text-xs text-slate-400">
+            What he wants to earn in a month, in his pocket — not revenue. Nothing is calculated
+            from it: his screen works backwards through the plan to the revenue it needs, prorated
+            in the month he started. He sets this himself on his own screen; this box is here for
+            the first one, or when he asks.
           </p>
         </div>
 
@@ -127,10 +151,57 @@ export default function Settings() {
             value={form.startDate || ''}
             onChange={(e) => setForm({ ...form, startDate: e.target.value })}
           />
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-400">
             The month containing this date is prorated to the days actually worked — base
             and both band edges scale down. Every later month runs the plan at full value.
             Leave blank to treat every month as complete.
+          </p>
+        </div>
+
+        <div className="border-t border-ink-800 pt-4">
+          <h3 className="label mb-3">Uber's cut</h3>
+          <div className="grid sm:grid-cols-2 gap-3 max-w-xl">
+            <div className="grid gap-1">
+              <label className="label" htmlFor="revenueBasis">
+                Imported revenue is
+              </label>
+              <select
+                id="revenueBasis"
+                value={form.revenueBasis || 'net'}
+                onChange={(e) => setForm({ ...form, revenueBasis: e.target.value })}
+              >
+                <option value="gross">The full fare — Uber charges a subscription</option>
+                <option value="net">Net of a percentage commission</option>
+              </select>
+            </div>
+            <div className="grid gap-1">
+              <label className="label" htmlFor="uberCommissionRate">
+                Uber's service fee (0–1)
+              </label>
+              <input
+                id="uberCommissionRate"
+                type="number"
+                step="0.01"
+                min="0"
+                max="0.9"
+                className="num"
+                value={form.uberCommissionRate ?? ''}
+                onChange={(e) => setForm({ ...form, uberCommissionRate: e.target.value })}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mt-2">
+            On Drive Pass, Uber's cut is the subscription — a flat charge, not a share of each fare —
+            and the import already captures it from the payments export along with the Flex Pay fee
+            and any toll reimbursed. Those are measured figures; leave the fee at{' '}
+            <span className="num">0</span> and nothing is modelled.
+          </p>
+          <p className="text-xs text-slate-400 mt-2">
+            Set a percentage only on an arrangement that really takes a share of the fare. The export
+            states neither the gross fare nor a service fee, so the fare is then reconstructed as{' '}
+            <span className="num">earnings ÷ (1 − fee)</span> and every figure derived from it is
+            labelled an estimate. Nothing in the commission plan reads either field: the driver is
+            paid on the revenue recorded.
           </p>
         </div>
 
@@ -190,7 +261,7 @@ export default function Settings() {
                 value={form.resaleValue ?? ''}
                 onChange={(e) => setForm({ ...form, resaleValue: e.target.value })}
               />
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-slate-400">
                 Entered instead of a depreciation cost. The lease is paid in full out of profit,
                 and what that buys is a car owned outright — booking depreciation as well would
                 charge for the same loss of value twice.
@@ -210,7 +281,7 @@ export default function Settings() {
               />
             </div>
           </div>
-          <p className="text-xs text-slate-500 mt-2">
+          <p className="text-xs text-slate-400 mt-2">
             Used to compare what the car returns against leaving the money on deposit. Interest is
             charged only on your own share, not the leased part, and costs that end — the lease —
             are averaged over the years you will run it rather than charged forever.
@@ -226,23 +297,23 @@ export default function Settings() {
               Reset
             </button>
           )}
-          {status && <span className="text-sm text-accent">{status}</span>}
+          {status && <span className="text-sm text-slate-100">{status}</span>}
         </div>
       </form>
 
-      <div className={`card border ${matches ? 'border-accent/30' : 'border-warn/40'}`}>
+      <div className={`card border ${matches ? 'border-ink-700' : 'border-warn/40'}`}>
         <h2 className="label mb-2">Live check</h2>
         <p className="text-sm text-slate-400">
           At revenue <span className="num text-slate-200">{money(CHECK_REVENUE)}</span> this plan
           pays{' '}
-          <span className={`num ${matches ? 'text-accent' : 'text-warn'}`}>
+          <span className={`num ${matches ? 'text-slate-50' : 'text-warn'}`}>
             {money(live.total)}
           </span>
           .
         </p>
         <p className="text-xs mt-1">
           {matches ? (
-            <span className="text-accent">Matches the reference figure of {money(CHECK_EXPECTED)}.</span>
+            <span className="text-slate-200">Matches the reference figure of {money(CHECK_EXPECTED)}.</span>
           ) : (
             <span className="text-warn">
               Reference figure is {money(CHECK_EXPECTED)} — this plan differs by{' '}

@@ -32,17 +32,17 @@ export default function Validate({ month, setMonth }) {
         <div className="card overflow-x-auto">
           <div className="flex items-baseline justify-between mb-3 gap-4 flex-wrap">
             <h2 className="label">Uber km vs GPS km</h2>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-slate-400">
               Uber counts on-trip km only · flagged above{' '}
               <span className="num">+{data.threshold}%</span> ·{' '}
-              <span className={data.flaggedCount ? 'text-warn' : 'text-slate-500'}>
+              <span className={data.flaggedCount ? 'text-warn' : 'text-slate-400'}>
                 <span className="num">{count(data.flaggedCount)}</span> flagged
               </span>
             </span>
           </div>
 
           {data.rows.length === 0 ? (
-            <p className="text-sm text-slate-500 py-6 text-center">
+            <p className="text-sm text-slate-400 py-6 text-center">
               No day this month has both an Uber km and a GPS km reading. Import a trip
               activity CSV for Uber distance; GPS mileage arrives from the nightly sync.
             </p>
@@ -77,7 +77,7 @@ export default function Validate({ month, setMonth }) {
                           check
                         </span>
                       ) : (
-                        <span className="text-xs text-slate-600">ok</span>
+                        <span className="text-xs text-slate-400">ok</span>
                       )}
                     </td>
                   </tr>

@@ -22,17 +22,19 @@ export default function NextMonth({ summary, isOwner }) {
   if (!n) return null;
 
   const tierLabel = n.reachesTop ? 'tier 3' : n.reachesBand ? 'tier 2' : 'base only';
-  const tierTone = n.reachesTop ? 'text-accent' : n.reachesBand ? 'text-warn' : 'text-slate-400';
+  // Which tier a month reaches is a milestone, not money — the take-home row
+  // below is the only green in this card.
+  const tierTone = n.reachesTop ? 'text-slate-50' : n.reachesBand ? 'text-warn' : 'text-slate-300';
 
   return (
     <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
         <h2 className="label">{monthLabel(`${n.month}-01`.slice(0, 10))} at this rate</h2>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-400">
           full month · <span className="num">{n.days}</span> days · full bands
         </span>
       </div>
-      <p className="text-xs text-slate-500 mb-3">
+      <p className="text-xs text-slate-400 mb-3">
         <span className="num">{amount(n.dailyRate)}</span>/day carried forward. This month is
         partial and prorated, so it is not a fair guide.
       </p>
@@ -62,12 +64,12 @@ export default function NextMonth({ summary, isOwner }) {
                   aria-expanded={showCosts}
                 >
                   Running costs{' '}
-                  <span className="text-slate-600 text-xs">
+                  <span className="text-slate-400 text-xs">
                     {showCosts ? '▾' : '▸'} {n.costs.items.length} item
                     {n.costs.items.length === 1 ? '' : 's'}
                   </span>
                 </button>
-                <span className="block text-xs text-slate-600">
+                <span className="block text-xs text-slate-400">
                   {amount(n.kmDriven)} km projected
                 </span>
               </dt>
@@ -81,15 +83,15 @@ export default function NextMonth({ summary, isOwner }) {
             {showCosts && (
               <div className="pl-3 border-l border-ink-800 space-y-1.5 py-1">
                 {n.costs.items.length === 0 ? (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-400">
                     No costs recorded. Add them under Settings.
                   </p>
                 ) : (
                   n.costs.items.map((c) => (
                     <div key={c.id} className="flex items-baseline justify-between gap-4">
-                      <dt className="text-xs text-slate-500">
+                      <dt className="text-xs text-slate-400">
                         {c.label}
-                        <span className="text-slate-600 ml-2">
+                        <span className="text-slate-400 ml-2">
                           {categoryLabel(c.category)}
                           {c.frequency === 'annual' && ' · yearly ÷ 12'}
                           {c.frequency === 'once' && ' · one-off'}
@@ -110,14 +112,14 @@ export default function NextMonth({ summary, isOwner }) {
                 label={n.uberFees < 0 ? 'Uber charges' : 'Uber refunds'}
                 hint="at this month's rate — subscriptions and fees"
                 value={amount(n.uberFees)}
-                tone={n.uberFees < 0 ? 'text-warn' : 'text-accent'}
+                tone={n.uberFees < 0 ? 'text-warn' : 'text-slate-100'}
               />
             )}
             <div className="flex items-baseline justify-between gap-4 border-t border-ink-800 pt-2 mt-2">
               <dt className="text-sm font-medium text-slate-300">
                 {n.ownerProfit < 0 ? 'Shortfall' : 'Profit'}
               </dt>
-              <dd className={`num text-lg ${n.ownerProfit < 0 ? 'text-danger' : 'text-accent'}`}>
+              <dd className={`num text-lg ${n.ownerProfit < 0 ? 'text-danger' : 'text-slate-50'}`}>
                 {money(n.ownerProfit)}
               </dd>
             </div>
@@ -125,7 +127,7 @@ export default function NextMonth({ summary, isOwner }) {
         )}
       </dl>
 
-      <p className="text-xs text-slate-600 mt-3">
+      <p className="text-xs text-slate-400 mt-3">
         Assumes every day is driven — days off are not knowable ahead, so treat this as the ceiling.
       </p>
     </div>
@@ -137,7 +139,7 @@ function Row({ label, hint, value, tone = 'text-slate-200' }) {
     <div className="flex items-baseline justify-between gap-4">
       <dt className="text-sm text-slate-400">
         {label}
-        {hint && <span className="block text-xs text-slate-600">{hint}</span>}
+        {hint && <span className="block text-xs text-slate-400">{hint}</span>}
       </dt>
       <dd className={`num ${tone}`}>{value}</dd>
     </div>
