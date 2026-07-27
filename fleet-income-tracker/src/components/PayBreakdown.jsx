@@ -1,5 +1,5 @@
 import { money, amount } from '../format.js';
-import { displayThreshold, displayBase } from '../display.js';
+import { displayThreshold } from '../display.js';
 
 /**
  * The tier-by-tier breakdown of what the month has paid so far.
@@ -38,10 +38,13 @@ export default function PayBreakdown({
           <div key={t.key} className="flex items-baseline justify-between gap-4">
             <dt className="text-sm text-slate-300 min-w-0">
               {labelFor(t)}
+              {/* No figure here: the amount column beside it already gives the
+                  base, and quoting a rounded 19,500 next to a paid 19,355 was the
+                  card contradicting itself on one line. Rounding a payment up
+                  flatters it; rounding it down understates it; printing it once,
+                  as paid, does neither. */}
               {t.key === 'base' && (
-                <span className="num text-slate-400 ml-2 text-xs">
-                  {amount(displayBase(plan.base))} whatever you earn
-                </span>
+                <span className="text-slate-400 ml-2 text-xs">whatever you earn</span>
               )}
               {t.basis > 0 && (
                 <span className="num text-slate-400 ml-2 text-xs">on {amount(t.basis)}</span>

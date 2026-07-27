@@ -103,6 +103,35 @@ export function workingDaysInMonth(summary) {
   return Math.max(1, (summary.operatingDays || 0) - off);
 }
 
+/**
+ * The next threshold that changes what a rupee is worth, read off revenue BANKED.
+ *
+ * Not off the projection: the push card targets whatever the forecast is heading
+ * for, which on a good pace skips straight to the top tier and quietly implies the
+ * band is already unlocked. What he wants here is the nearest line that actually
+ * moves his marginal rate — the one the next rupee crosses.
+ *
+ * Thresholds come from `displayThreshold`, so this card, the ladder axis and the
+ * hero's secondary line all name the same number.
+ *
+ * Returns null once he is in the top zone: there is no next line, and the card
+ * says what he is on instead of inventing one.
+ */
+export function nextZone(summary) {
+  const plan = driverPlan(summary);
+  const revenue = summary?.revenue || 0;
+  const start = displayThreshold(plan.bandStart);
+  const end = displayThreshold(plan.bandEnd);
+
+  if (revenue < start) {
+    return { rate: plan.bandRate, threshold: start, remaining: Math.round(start - revenue) };
+  }
+  if (revenue < end) {
+    return { rate: plan.topRate, threshold: end, remaining: Math.round(end - revenue) };
+  }
+  return null;
+}
+
 /** Trips per working day, beside every revenue-per-day figure. */
 export function tripsPerDay(summary) {
   const days = summary?.earningDays || 0;

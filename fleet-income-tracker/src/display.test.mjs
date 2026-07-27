@@ -26,6 +26,7 @@ import {
   cashPocket,
   lastLoggedDay,
   chargingHeadline,
+  nextZone,
 } from './display.js';
 import { prorate, monthFactor, DEFAULT_SETTINGS } from '../shared/commission.mjs';
 
@@ -1122,5 +1123,45 @@ describe('the month average and the rolling pace are different questions', () =>
     const flat = Array.from({ length: 7 }, (_, i) => ({ date: `2026-07-1${i}`, revenue: 12000, trips: 10 }));
     const s = summary({ dailyAverage: 12000, earningDays: 7, workedShifts: flat });
     expect(rollingPace(s).perShift).toBe(s.dailyAverage);
+  });
+});
+
+describe('nextZone', () => {
+  it('names the band while he is below it', () => {
+    const zone = nextZone(summary({ revenue: 57036 }));
+    // 240,000 shown, 30% beyond it.
+    expect(zone).toEqual({ rate: 0.3, threshold: 240000, remaining: 182964 });
+  });
+
+  it('names the top tier once the band is banked', () => {
+    const zone = nextZone(summary({ revenue: 260000 }));
+    expect(zone).toEqual({ rate: 0.5, threshold: 300000, remaining: 40000 });
+  });
+
+  it('has nothing left to name in the top zone', () => {
+    expect(nextZone(summary({ revenue: 300000 }))).toBe(null);
+    expect(nextZone(summary({ revenue: 420000 }))).toBe(null);
+  });
+
+  it('quotes the same rounded thresholds as the ladder and the hero', () => {
+    const s = summary({ prorationFactor: JULY_FACTOR, revenue: 57036 });
+    const zone = nextZone(s);
+    // The prorated band start, rounded once and shared.
+    expect(zone.threshold).toBe(displayThreshold(s.plan.bandStart));
+    expect(zone.threshold).toBe(92000);
+    expect(zone.remaining).toBe(34964);
+
+    // And past it, the same tier-3 figure the hero's small print is struck from.
+    const later = nextZone(summary({ prorationFactor: JULY_FACTOR, revenue: 100000 }));
+    expect(later.threshold).toBe(paces(summary({ prorationFactor: JULY_FACTOR })).tier3);
+    expect(later.threshold).toBe(116000);
+  });
+
+  it('reads off revenue banked, not the forecast', () => {
+    // The push card would target the top tier here, because the projection clears
+    // the band. The next rupee still crosses the band, and that is the line worth
+    // naming.
+    const s = summary({ revenue: 57036, projectedRevenue: 400000 });
+    expect(nextZone(s).rate).toBe(0.3);
   });
 });

@@ -11,6 +11,7 @@ import {
   chargingForDay,
   rollingPace,
   lastLoggedDay,
+  nextZone,
 } from '../display.js';
 import MonthNav from '../components/MonthNav.jsx';
 import TierLadder from '../components/TierLadder.jsx';
@@ -27,8 +28,8 @@ import VehicleMap from '../components/VehicleMap.jsx';
  *
  *   1. one number — what to drive today;
  *   2. one chart — where the month sits against the two thresholds;
- *   3. the supporting stats — pay, revenue, the daily average, yesterday, the
- *      best day, and the days left.
+ *   3. the supporting stats — the next rate line, revenue, the daily average,
+ *      yesterday, the best day, and the days left.
  *
  * Then his own target, and the cash he is holding — the two things he has to
  * know that a number for today cannot tell him.
@@ -78,11 +79,12 @@ export default function DriverDashboard({ summary, month, setMonth, onRefresh })
       {/* The supporting stats, two by two on a phone. They sit BELOW the hero and
           the ladder and can wrap freely; nothing here may push either of the first
           two zones down the screen.
-          Pay first — it is the only figure here that is his money. Revenue and the
-          daily average follow, neutral, because they are what the car took rather
-          than what he keeps. */}
+          Every figure here is neutral, because none of them is his money: this row
+          is what the car did. His pay lives under "How your pay works", where the
+          breakdown that explains it is — a green total sitting among six grey
+          cards drew the eye to the one number that needs no watching. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <Stat label="Your pay so far" value={money(summary.driverPay)} accent />
+        <NextZone summary={summary} />
         <Stat
           label="Revenue this month"
           value={money(summary.revenue)}
@@ -177,6 +179,35 @@ function Hero({ target }) {
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * The next line that changes what a rupee is worth.
+ *
+ * Read off revenue banked rather than the forecast, so it names the threshold the
+ * next rupee actually crosses — and off `displayThreshold`, so it is the same
+ * figure as the ladder axis and the hero's small print.
+ */
+function NextZone({ summary }) {
+  const zone = nextZone(summary);
+  if (!zone) {
+    // Nothing left to unlock: say what he is on.
+    return (
+      <Stat
+        label="Your rate now"
+        value={`${Math.round((summary.push?.topRate || 0.5) * 100)}%`}
+        sub="of every rupee from here"
+      />
+    );
+  }
+  const pct = Math.round(zone.rate * 100);
+  return (
+    <Stat
+      label={`To your ${pct}% zone`}
+      value={money(zone.remaining)}
+      sub={`then ${pct}% of every rupee`}
+    />
   );
 }
 
