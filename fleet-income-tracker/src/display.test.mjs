@@ -1129,13 +1129,30 @@ describe('the month average and the rolling pace are different questions', () =>
 describe('nextZone', () => {
   it('names the band while he is below it', () => {
     const zone = nextZone(summary({ revenue: 57036 }));
-    // 240,000 shown, 30% beyond it.
-    expect(zone).toEqual({ rate: 0.3, threshold: 240000, remaining: 182964 });
+    expect(zone).toMatchObject({ rate: 0.3, threshold: 240000, remaining: 183000 });
+    // And says what the 30% applies to: the band has a ceiling.
+    expect(zone.width).toBe(60000);
+    expect(zone.until).toBe(300000);
   });
 
   it('names the top tier once the band is banked', () => {
     const zone = nextZone(summary({ revenue: 260000 }));
-    expect(zone).toEqual({ rate: 0.5, threshold: 300000, remaining: 40000 });
+    expect(zone).toMatchObject({ rate: 0.5, threshold: 300000, remaining: 40000 });
+    // Nothing above the top tier, so no ceiling to state.
+    expect(zone.width).toBe(null);
+  });
+
+  it('asks for enough to actually cross the line, not to reach the rounded one', () => {
+    // Prorated: the band really starts at 92,903.23 and the ladder prints 92,000.
+    // Measured to the printed bar the ask was 34,964, which lands 903 short and
+    // unlocks nothing — the driver hits the figure and his rate does not change.
+    const s = summary({ prorationFactor: JULY_FACTOR, revenue: 57035.8 });
+    const zone = nextZone(s);
+    expect(zone.threshold).toBe(92000);
+    expect(zone.remaining).toBe(35900);
+    expect(57035.8 + zone.remaining).toBeGreaterThanOrEqual(s.plan.bandStart);
+    // The old figure would not have.
+    expect(57035.8 + 34964).toBeLessThan(s.plan.bandStart);
   });
 
   it('has nothing left to name in the top zone', () => {
@@ -1149,7 +1166,6 @@ describe('nextZone', () => {
     // The prorated band start, rounded once and shared.
     expect(zone.threshold).toBe(displayThreshold(s.plan.bandStart));
     expect(zone.threshold).toBe(92000);
-    expect(zone.remaining).toBe(34964);
 
     // And past it, the same tier-3 figure the hero's small print is struck from.
     const later = nextZone(summary({ prorationFactor: JULY_FACTOR, revenue: 100000 }));
@@ -1163,5 +1179,57 @@ describe('nextZone', () => {
     // naming.
     const s = summary({ revenue: 57036, projectedRevenue: 400000 });
     expect(nextZone(s).rate).toBe(0.3);
+  });
+});
+
+describe("today is not a finished day", () => {
+  /** The production month as it stood on the 27th, a shift still in progress. */
+  const july = summary({
+    revenue: 72852.02,
+    earningDays: 7,
+    dailyAverage: 10407.43,
+    workedShifts: [
+      { date: '2026-07-20', revenue: 2573.21, trips: 3 },
+      { date: '2026-07-21', revenue: 10211.21, trips: 10 },
+      { date: '2026-07-22', revenue: 13708.21, trips: 16 },
+      { date: '2026-07-24', revenue: 13559.64, trips: 11 },
+      { date: '2026-07-25', revenue: 16983.53, trips: 13 },
+      { date: '2026-07-26', revenue: 11553.23, trips: 6 },
+      // Today: three trips by lunchtime.
+      { date: '2026-07-27', revenue: 4262.99, trips: 3 },
+    ],
+  });
+
+  it('never offers today as the last logged day', () => {
+    const last = lastLoggedDay(july, '2026-07-27');
+    expect(last.date).toBe('2026-07-26');
+    expect(last.revenue).toBe(11553.23);
+    // It used to hand back today's 4,262.99 — a morning, labelled as a day.
+    expect(last.date).not.toBe('2026-07-27');
+  });
+
+  it('keeps yesterday once the day has turned', () => {
+    // On the 28th, the 27th is complete and becomes the answer.
+    expect(lastLoggedDay(july, '2026-07-28').date).toBe('2026-07-27');
+  });
+
+  it('has nothing to offer when only today has been logged', () => {
+    const s = summary({ workedShifts: [{ date: '2026-07-27', revenue: 4262.99, trips: 3 }] });
+    expect(lastLoggedDay(s, '2026-07-27')).toBe(null);
+  });
+
+  it('leaves today out of recent form', () => {
+    const pace = rollingPace(july, 7, '2026-07-27');
+    // The six complete days: 68,589.03 / 6.
+    expect(pace.perShift).toBe(11432);
+    expect(pace.shifts).toBe(6);
+    // With today averaged in it read 10,407 — a fall in form that was really the
+    // clock, and the same figure as the month average by coincidence.
+    expect(pace.perShift).not.toBe(10407);
+  });
+
+  it('says nothing about form when today is all there is', () => {
+    const s = summary({ workedShifts: [{ date: '2026-07-27', revenue: 4262.99, trips: 3 }] });
+    expect(rollingPace(s, 7, '2026-07-27')).toBe(null);
   });
 });

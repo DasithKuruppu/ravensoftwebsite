@@ -206,7 +206,9 @@ function NextZone({ summary }) {
     <Stat
       label={`To your ${pct}% zone`}
       value={money(zone.remaining)}
-      sub={`then ${pct}% of every rupee`}
+      // The band has a ceiling — past it the rate steps up again — so say what the
+      // 30% actually applies to rather than implying it runs forever.
+      sub={zone.width ? `then ${pct}% of the next ${amount(zone.width)}` : `then ${pct}% of every rupee`}
     />
   );
 }

@@ -14,6 +14,7 @@
  * rather than eyeballed in the browser.
  */
 import { calculatePay } from '../shared/commission.mjs';
+import { todayLocal } from './format.js';
 
 /**
  * The canonical rounded figure for any threshold we SHOW.
@@ -120,14 +121,32 @@ export function workingDaysInMonth(summary) {
 export function nextZone(summary) {
   const plan = driverPlan(summary);
   const revenue = summary?.revenue || 0;
-  const start = displayThreshold(plan.bandStart);
-  const end = displayThreshold(plan.bandEnd);
+  if (!plan.bandEnd) return null;
 
-  if (revenue < start) {
-    return { rate: plan.bandRate, threshold: start, remaining: Math.round(start - revenue) };
+  // The threshold PRINTED is the rounded one, so the card names the same line as
+  // the ladder axis. The amount REQUIRED is measured against the exact one and
+  // rounded up, because this is a promise: earn it and the rate changes. Measured
+  // against the rounded-down bar it was 903 short of the real line — he would have
+  // hit the number and nothing would have happened.
+  const upTo = (exact, shown, rate) => ({
+    rate,
+    threshold: displayThreshold(shown),
+    remaining: Math.ceil((exact - revenue) / 100) * 100,
+  });
+
+  if (revenue < plan.bandStart) {
+    return {
+      ...upTo(plan.bandStart, plan.bandStart, plan.bandRate),
+      // The band has a ceiling: past it the rate steps up again, so "30% of every
+      // rupee" would be true only for the width of the band.
+      until: displayThreshold(plan.bandEnd),
+      // Rounded down like every other bar he reads, so "the next 23,000" is a
+      // figure he can hold rather than 23,225.81.
+      width: displayThreshold(plan.bandEnd - plan.bandStart),
+    };
   }
-  if (revenue < end) {
-    return { rate: plan.topRate, threshold: end, remaining: Math.round(end - revenue) };
+  if (revenue < plan.bandEnd) {
+    return { ...upTo(plan.bandEnd, plan.bandEnd, plan.topRate), until: null, width: null };
   }
   return null;
 }
@@ -220,15 +239,20 @@ export function targetForMonth(summary) {
 }
 
 /**
- * The most recent day with anything logged on it.
+ * The most recent COMPLETE day with anything logged on it.
  *
- * The yesterday card has nothing to show every morning until the evening's import
- * lands, and on a Monday after a day off it has nothing all day. A dash in a stat
- * card is dead space; the last day he actually drove is a real answer to the same
- * question, and it is never empty once the month has begun.
+ * Today is excluded, and that is the whole point. The card exists because
+ * yesterday has nothing to show every morning until the evening's import lands —
+ * but today usually does have something by then, a few hours of a shift still
+ * being driven. Offering that as "last logged day" labels a half-finished day as a
+ * finished one and invites comparison against complete days it cannot match: on
+ * the 27th it read 4,263 against a 16,984 best day.
+ *
+ * `today` is injectable so the boundary is testable rather than dependent on when
+ * the suite happens to run.
  */
-export function lastLoggedDay(summary) {
-  const shifts = summary?.workedShifts || [];
+export function lastLoggedDay(summary, today = todayLocal()) {
+  const shifts = (summary?.workedShifts || []).filter((s) => s.date < today);
   if (!shifts.length) return null;
   return shifts[shifts.length - 1];
 }
@@ -756,8 +780,13 @@ export const PACE_WINDOW = 7;
  * are fewer of both, so the window says how many it used and the trend is
  * withheld until there is something to compare against.
  */
-export function rollingPace(summary, size = PACE_WINDOW) {
-  const shifts = [...(summary?.workedShifts || [])].sort((a, b) => b.date.localeCompare(a.date));
+export function rollingPace(summary, size = PACE_WINDOW, today = todayLocal()) {
+  // Complete days only. Today is a few hours of a shift, so averaging it in
+  // reports a fall in form that is really just the clock: on the 27th it pulled
+  // the pace from 11,431 down to 10,407 on the strength of a morning.
+  const shifts = (summary?.workedShifts || [])
+    .filter((s) => s.date < today)
+    .sort((a, b) => b.date.localeCompare(a.date));
   if (!shifts.length) return null;
 
   const recent = shifts.slice(0, size);
