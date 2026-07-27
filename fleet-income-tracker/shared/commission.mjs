@@ -28,6 +28,39 @@ export const DEFAULT_SETTINGS = {
    * not in source control.
    */
   driverName: 'Driver',
+  /**
+   * What the driver wants to TAKE HOME in a month, in LKR.
+   *
+   * His figure, not a commercial term, and nothing in the pay calculation reads
+   * it. Stated as earnings rather than revenue because earnings are what he
+   * actually wants — the revenue needed to produce them is arithmetic, and the
+   * display layer derives it by inverting the tier function against whatever
+   * plan applies that month (prorated in the month he starts).
+   *
+   * Payouts land at the end of each month, so this is a monthly figure.
+   */
+  payTarget: 100000,
+  /**
+   * Whether stored `revenue` is the full fare or what was left after a
+   * percentage commission.
+   *
+   * 'gross' is the default because this fleet is on Drive Pass: Uber charges a
+   * flat subscription rather than a share of each fare, so "Your earnings" in
+   * the payments export IS the fare, and Uber's cut arrives as the subscription
+   * line that the import already captures. Modelling a percentage on top of that
+   * would invent a second, larger cut that nobody is charged.
+   *
+   * Set 'net' with a rate only on an arrangement that really does take a share
+   * of the fare — then the fare is reconstructed as earnings ÷ (1 − rate) and
+   * every figure derived from it is labelled an estimate, because the export does
+   * not state it.
+   */
+  revenueBasis: 'gross',
+  /**
+   * A percentage commission on the fare, if the arrangement has one. Zero on
+   * Drive Pass, where the subscription is the whole of Uber's cut.
+   */
+  uberCommissionRate: 0,
   /** What the vehicle cost, for return-on-capital. null = not recorded. */
   capitalInvested: null,
   /** The alternative the capital could have earned, annual %. */

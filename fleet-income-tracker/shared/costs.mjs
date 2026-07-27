@@ -43,19 +43,45 @@ export const COST_FREQUENCIES = [
 ];
 
 /**
- * Costs the driver may see, by default.
+ * Costs a driver may EVER see — a whitelist, not a default.
  *
  * Charging is his to influence: he chooses where and when to plug in, and the
  * difference between the cheapest and dearest CCS2 tariff is nearly threefold.
- * Everything else — the lease, depreciation, insurance — is the owner's
- * position and none of his business.
+ * Everything else — the lease, depreciation, insurance, the revenue licence — is
+ * the owner's commercial position and none of his business.
+ *
+ * This is a whitelist because the alternative failed open. Visibility used to be
+ * a per-line flag, so ticking "driver sees" on the lease would have shown him the
+ * lease; the category gate now means that flag can only ever HIDE something
+ * inside the whitelist, never reveal something outside it. Adding a driver-facing
+ * category is a deliberate edit here, which is where a decision like that belongs.
  */
+export const DRIVER_VISIBLE_CATEGORIES = ['charging'];
+
+/** Kept as the default-on list within the whitelist. */
 export const DRIVER_VISIBLE_BY_DEFAULT = ['charging'];
 
+/** Is this category one a driver is ever allowed to be shown? */
+export function isDriverPermitted(cost) {
+  return DRIVER_VISIBLE_CATEGORIES.includes(cost?.category);
+}
+
 export function isDriverVisible(cost) {
+  // The category gate first, and it cannot be overridden by the line's own flag.
+  if (!isDriverPermitted(cost)) return false;
   if (cost?.driverVisible === true) return true;
   if (cost?.driverVisible === false) return false;
   return DRIVER_VISIBLE_BY_DEFAULT.includes(cost?.category);
+}
+
+/**
+ * The cost lines that may be serialised into a driver-role response.
+ *
+ * Every driver-facing payload goes through this, so "the UI does not render it"
+ * is never what keeps a figure private — it is absent from the response.
+ */
+export function driverVisibleCosts(costs) {
+  return (costs || []).filter(isDriverVisible);
 }
 
 /** A starting set, so the editor is not an empty grid. Amounts are zero. */
@@ -189,4 +215,157 @@ export function levelisedMonthly(costs, month, usage = {}, horizonMonths = 60) {
 
 export function categoryLabel(key) {
   return COST_CATEGORIES.find((c) => c.key === key)?.label || 'Other';
+}
+
+/* ────────────────────────── charging, as it happened ────────────────────────── */
+
+/**
+ * What a day's charging cost, preferring what was actually paid.
+ *
+ * A configured rate — 2,600 a day driven, or 12 a kilometre — is a budget, not a
+ * cost. It is the same every day by construction, so any "what did today cost"
+ * display built on it is decoration: it cannot move, cannot be wrong, and cannot
+ * be improved on. Logged sessions are the real thing.
+ *
+ * So: a day with sessions costs what the sessions cost, and a day without falls
+ * back to the configured rate and is flagged `estimated`. A month may mix the two
+ * — that is the honest state of a fleet part-way through adopting the habit — and
+ * every display that shows a day says which kind it is.
+ */
+export function daySessionTotal(entry) {
+  const sessions = Array.isArray(entry?.chargeSessions) ? entry.chargeSessions : [];
+  let total = 0;
+  let counted = 0;
+  for (const session of sessions) {
+    const amount = Number(session?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    total += amount;
+    counted += 1;
+  }
+  return counted > 0 ? { total: round2(total), sessions: counted } : null;
+}
+
+/** kWh logged for a day, when every session recorded it. */
+export function dayKwh(entry) {
+  const sessions = Array.isArray(entry?.chargeSessions) ? entry.chargeSessions : [];
+  const values = sessions.map((s) => Number(s?.kwh)).filter((n) => Number.isFinite(n) && n > 0);
+  return values.length ? round2(values.reduce((a, b) => a + b, 0)) : null;
+}
+
+/** The distance a day is charged against: the tracker's if it has one. */
+export function dayKm(entry) {
+  const km = Number(entry?.gpsKm) || Number(entry?.uberKm) || 0;
+  return km > 0 ? round2(km) : 0;
+}
+
+/**
+ * What the configured charging lines would cost for one day.
+ *
+ * Only the shapes that can be attributed to a single day are used: a per-day rate
+ * and a per-km rate. A monthly or annual charging line is a subscription, not the
+ * cost of a shift, and spreading it across days would invent a daily figure that
+ * no day incurred — so those stay in the month total and out of the daily view.
+ */
+export function modelledDayCharging(chargingCosts, month, entry) {
+  const km = dayKm(entry);
+  let total = 0;
+  for (const cost of chargingCosts || []) {
+    const amount = Number(cost?.amount) || 0;
+    if (!amount) continue;
+    if (cost.date && cost.date.slice(0, 7) > month) continue;
+    if (cost.frequency === 'daily') total += amount;
+    else if (cost.frequency === 'perKm') total += amount * km;
+  }
+  return round2(total);
+}
+
+/**
+ * A month of charging, day by day, logged where it exists and modelled where it
+ * does not.
+ *
+ * `perKm` is the number to judge on, and it is computed over MATCHED days only:
+ * days that have both a cost and a distance. Dividing a month's cost by a month's
+ * distance mixes day sets — a day whose GPS sync failed contributes cost but no
+ * kilometres — and the rate then jumps for a reason that has nothing to do with
+ * where anybody charged. Every per-km figure carries the day count it came from,
+ * so a rate computed over three days cannot pass for a month's verdict.
+ */
+export function chargingForMonth(entries, chargingCosts, month) {
+  const days = [];
+  for (const entry of entries || []) {
+    if (entry.offDay) continue;
+    const km = dayKm(entry);
+    const logged = daySessionTotal(entry);
+    const drove = km > 0 || (entry.revenue || 0) > 0 || (entry.trips || 0) > 0;
+    if (!logged && !drove) continue;
+
+    const cost = logged ? logged.total : modelledDayCharging(chargingCosts, month, entry);
+    if (cost <= 0 && !logged) continue;
+
+    days.push({
+      date: entry.date,
+      cost,
+      km,
+      kwh: logged ? dayKwh(entry) : null,
+      sessions: logged ? logged.sessions : 0,
+      estimated: !logged,
+      // Only a day with both halves can carry a rate.
+      perKm: cost > 0 && km > 0 ? round2(cost / km) : null,
+    });
+  }
+  days.sort((a, b) => a.date.localeCompare(b.date));
+
+  const logged = round2(days.filter((d) => !d.estimated).reduce((s, d) => s + d.cost, 0));
+  const modelled = round2(days.filter((d) => d.estimated).reduce((s, d) => s + d.cost, 0));
+
+  return {
+    days,
+    total: round2(logged + modelled),
+    logged,
+    modelled,
+    loggedDays: days.filter((d) => !d.estimated).length,
+    modelledDays: days.filter((d) => d.estimated).length,
+    ...matchedRate(days),
+  };
+}
+
+/**
+ * Cost per km over days that have both halves.
+ *
+ * Returns nulls rather than a rate when nothing matches: no figure is better than
+ * a rate divided by a distance nobody recorded.
+ */
+export function matchedRate(days) {
+  const matched = (days || []).filter((d) => d.cost > 0 && d.km > 0);
+  const cost = round2(matched.reduce((s, d) => s + d.cost, 0));
+  const km = round2(matched.reduce((s, d) => s + d.km, 0));
+  return {
+    perKm: km > 0 ? round2(cost / km) : null,
+    matchedDays: matched.length,
+    matchedCost: cost,
+    matchedKm: km,
+    // True when any matched day was modelled, so the rate is part budget.
+    matchedEstimated: matched.some((d) => d.estimated),
+  };
+}
+
+/**
+ * The trailing window, ending on `today`.
+ *
+ * Seven days is the fair unit for judging charging. A single day's rate swings on
+ * whether he happened to top up that evening — charge tonight, drive tomorrow, and
+ * the day looks expensive and the next looks free — and sessions are counted on
+ * the day they were paid rather than guessed at. Over a week those crossings even
+ * out, which is why this is the number the UI treats as the verdict.
+ */
+export function chargingWindow(charging, today, days = 7) {
+  const from = shiftDate(today, -(days - 1));
+  const window = (charging?.days || []).filter((d) => d.date >= from && d.date <= today);
+  return { days: window, from, to: today, ...matchedRate(window) };
+}
+
+function shiftDate(date, delta) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
 }

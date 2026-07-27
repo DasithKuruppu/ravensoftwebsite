@@ -3,6 +3,7 @@
  *
  *   Daily entry : pk = "DRIVER#<id>"  sk = "ENTRY#<yyyy-mm-dd>"
  *   Settings    : pk = "DRIVER#<id>"  sk = "SETTINGS"
+ *   Handovers   : pk = "DRIVER#<id>"  sk = "HANDOVERS"
  *
  * A month is one Query with begins_with(sk, "ENTRY#yyyy-mm"). Adding a second
  * driver later is just another DRIVER#<id> partition — every function here
@@ -32,6 +33,8 @@ const CHARGERS_SK = 'CHARGERS';
 const LASTFIX_SK = 'LASTFIX';
 // The owner's running costs. Never returned on a driver request.
 const COSTS_SK = 'COSTS';
+// Cash handed over, driver to owner. Per driver, because it is his balance.
+const HANDOVERS_SK = 'HANDOVERS';
 
 /* ────────────────────────────── DynamoDB ────────────────────────────── */
 
@@ -160,6 +163,27 @@ const ddbImpl = {
     return list;
   },
 
+  async getHandovers(driverId) {
+    const { GetCommand } = await import('@aws-sdk/lib-dynamodb');
+    const client = await ddb();
+    const res = await client.send(
+      new GetCommand({ TableName: TABLE, Key: { pk: pk(driverId), sk: HANDOVERS_SK } }),
+    );
+    return res.Item?.list || [];
+  },
+
+  async putHandovers(driverId, list) {
+    const { PutCommand } = await import('@aws-sdk/lib-dynamodb');
+    const client = await ddb();
+    await client.send(
+      new PutCommand({
+        TableName: TABLE,
+        Item: { pk: pk(driverId), sk: HANDOVERS_SK, list, updatedAt: new Date().toISOString() },
+      }),
+    );
+    return list;
+  },
+
   async getLastFix() {
     const { GetCommand } = await import('@aws-sdk/lib-dynamodb');
     const client = await ddb();
@@ -268,6 +292,17 @@ const memImpl = {
     writeAll(db);
     return list;
   },
+  async getHandovers(driverId) {
+    const db = readAll();
+    return (db[pk(driverId)] || {})[HANDOVERS_SK]?.list || [];
+  },
+  async putHandovers(driverId, list) {
+    const db = readAll();
+    db[pk(driverId)] = db[pk(driverId)] || {};
+    db[pk(driverId)][HANDOVERS_SK] = { list, updatedAt: new Date().toISOString() };
+    writeAll(db);
+    return list;
+  },
   async getLastFix() {
     const db = readAll();
     return (db[CONFIG_PK] || {})[LASTFIX_SK]?.fix || null;
@@ -285,6 +320,17 @@ const memImpl = {
 
 function stripKeys({ pk: _p, sk: _s, ...rest }) {
   return rest;
+}
+
+/** A label → amount map from storage, with anything unreadable dropped. */
+function plainMap(value) {
+  if (!value || typeof value !== 'object') return null;
+  const out = {};
+  for (const [label, amount] of Object.entries(value)) {
+    const n = num(amount);
+    if (Number.isFinite(n) && n !== 0) out[label] = n;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 function toEntry(item) {
@@ -305,6 +351,25 @@ function toEntry(item) {
     // more than it gave back.
     uberFees:
       rest.uberFees === undefined || rest.uberFees === null ? null : num(rest.uberFees),
+    // What he actually paid to charge, session by session. His own logging, and
+    // the only cost record the driver writes.
+    chargeSessions: Array.isArray(rest.chargeSessions)
+      ? rest.chargeSessions
+          .map((session) => ({
+            id: String(session?.id || ''),
+            amount: num(session?.amount),
+            station: session?.station ? String(session.station) : '',
+            kwh: session?.kwh === undefined || session?.kwh === null ? null : num(session.kwh),
+          }))
+          .filter((session) => Number.isFinite(session.amount) && session.amount > 0)
+      : [],
+    // The same charges itemised — label → amount, signed as Uber's export gives
+    // them. The net above answers "how much"; these answer "for what", which is
+    // the question a subscription charge actually invites.
+    uberFeeLines: plainMap(rest.uberFeeLines),
+    // Taxes Uber deducts inside the earnings figure. Already reflected in
+    // `revenue`, so they are carried for display and never added to the charges.
+    uberTaxLines: plainMap(rest.uberTaxLines),
     source: rest.source || 'manual',
     // A day the driver was not working. Kept separate from "no entry", which
     // only means nobody has recorded anything yet.

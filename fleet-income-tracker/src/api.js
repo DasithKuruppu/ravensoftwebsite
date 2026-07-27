@@ -8,25 +8,36 @@ const BASE = import.meta.env.VITE_API_URL || '/api';
 const TOKEN_KEY = 'fleet.token';
 const ROLE_KEY = 'fleet.role';
 
-// Kept in memory as the primary copy; localStorage only survives reloads.
-let memoryToken = localStorage.getItem(TOKEN_KEY) || null;
+/**
+ * localStorage, or nothing.
+ *
+ * The token is held in memory as the primary copy and localStorage only makes it
+ * survive a reload — so a context without one still works, it just forgets. That
+ * matters because components importing this module are rendered to a string in
+ * tests, where reading `localStorage` at module scope would throw before any
+ * assertion ran.
+ */
+const store = typeof localStorage === 'undefined' ? null : localStorage;
+
+let memoryToken = store?.getItem(TOKEN_KEY) || null;
 
 export function getToken() {
   return memoryToken;
 }
 
 export function getRole() {
-  return localStorage.getItem(ROLE_KEY) || null;
+  return store?.getItem(ROLE_KEY) || null;
 }
 
 export function setSession(token, role) {
   memoryToken = token;
+  if (!store) return;
   if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(ROLE_KEY, role);
+    store.setItem(TOKEN_KEY, token);
+    store.setItem(ROLE_KEY, role);
   } else {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(ROLE_KEY);
+    store.removeItem(TOKEN_KEY);
+    store.removeItem(ROLE_KEY);
   }
 }
 
@@ -73,9 +84,20 @@ export const api = {
   saveEntry: (date, entry) => request('PUT', `/entries/${date}`, entry),
   deleteEntry: (date) => request('DELETE', `/entries/${date}`),
   setOffDay: (date, off) => request('PUT', `/entries/${date}/off`, { off }),
+  // What he paid to charge. Writable by the driver: he is the one at the charger,
+  // and it is the only cost figure he records.
+  saveCharging: (date, sessions) => request('PUT', `/entries/${date}/charging`, { sessions }),
   importRows: (rows) => request('POST', '/entries/import', { rows }),
   settings: () => request('GET', '/settings'),
   saveSettings: (settings) => request('PUT', '/settings', settings),
+  // The driver's own goal. Separate from `saveSettings` because this is the one
+  // settings field he is allowed to write.
+  saveTarget: (payTarget) => request('PUT', '/settings/target', { payTarget }),
+  // The handover ledger. The driver logs; the owner confirms. Both read it.
+  handovers: () => request('GET', '/handovers'),
+  logHandover: (handover) => request('POST', '/handovers', handover),
+  confirmHandover: (id, confirmed = true) => request('PUT', `/handovers/${id}`, { confirmed }),
+  deleteHandover: (id) => request('DELETE', `/handovers/${id}`),
   validate: (month) => request('GET', `/validate?month=${month}`),
   location: () => request('GET', '/location'),
   costs: () => request('GET', '/costs'),

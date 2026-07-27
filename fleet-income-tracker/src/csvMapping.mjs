@@ -181,9 +181,61 @@ export function looksDateLike(sample) {
  */
 export const UBER_FEE_COLUMN = /trip\s*balance\s*:\s*(expenses|refunds)\s*:/i;
 
+/**
+ * Taxes Uber deducts INSIDE the earnings figure — SSCL, tax on the service fee.
+ *
+ * Kept apart from the fee columns above because these are already netted off
+ * "Your earnings", which is the revenue this app records. Adding them to the
+ * charge total would bill the fleet twice for the same deduction; they are
+ * carried separately so a card can show them for what they are.
+ */
+export const UBER_TAX_COLUMN = /your\s*earnings\s*:\s*taxes\s*:/i;
+
 /** Every fee/refund column in a header list. */
 export function feeColumns(columns) {
   return (columns || []).filter((c) => UBER_FEE_COLUMN.test(c));
+}
+
+/** Every in-earnings tax column in a header list. */
+export function taxColumns(columns) {
+  return (columns || []).filter((c) => UBER_TAX_COLUMN.test(c));
+}
+
+/**
+ * What to call one of Uber's columns.
+ *
+ * The headers are colon-delimited paths — "Paid to you:Trip balance:Expenses:
+ * Driver subscription charge" — and only the leaf says what the money was. The
+ * path above it is the accounting bucket, which is what `kind` records.
+ */
+export function lineLabel(column) {
+  const parts = String(column || '').split(':');
+  return (parts[parts.length - 1] || '').trim() || 'Uber charge';
+}
+
+/**
+ * One row's fee columns, itemised rather than summed.
+ *
+ * A single net figure answers "how much did Uber take" but not "take for what",
+ * and the second question is the one anybody actually asks of a subscription
+ * charge, a Flex Pay fee and a toll reimbursed. The signs are the export's own:
+ * negative is money Uber took.
+ */
+export function feeLineItems(row, columns) {
+  const items = [];
+  for (const column of columns || []) {
+    const raw = String(row?.[column] ?? '').trim();
+    if (!raw) continue;
+    const amount = Number(raw.replace(/[,\s]/g, ''));
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    items.push({
+      label: lineLabel(column),
+      amount,
+      // Which side of the trip balance it came from, as the export files it.
+      kind: /refunds/i.test(column) ? 'refund' : 'expense',
+    });
+  }
+  return items;
 }
 
 /** Net of one row's fee and refund columns: negative when Uber took more. */

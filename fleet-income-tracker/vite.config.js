@@ -21,6 +21,16 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['shared/**/*.test.mjs', 'api/**/*.test.mjs', 'jobs/**/*.test.mjs', 'src/**/*.test.mjs'],
+    // `.test.jsx` too: a couple of assertions are about what a component actually
+    // renders — no decimals anywhere in the driver's cash card, for instance —
+    // which is not a claim the helpers alone can make. Those render to a string
+    // through react-dom/server, so no browser environment is needed.
+    include: [
+      'shared/**/*.test.mjs',
+      'api/**/*.test.mjs',
+      'jobs/**/*.test.mjs',
+      'src/**/*.test.mjs',
+      'src/**/*.test.jsx',
+    ],
   },
 });
