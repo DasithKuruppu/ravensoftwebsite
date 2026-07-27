@@ -1095,3 +1095,32 @@ describe('one per-km headline', () => {
     expect(chargingHeadline(summary())).toBe(null);
   });
 });
+
+describe('the month average and the rolling pace are different questions', () => {
+  it('does not conflate the month to date with recent form', () => {
+    // A month that started slowly and picked up: the month average and the last
+    // few days say different things, and both are true. The stat card shows the
+    // first, the goal block the second, and each names its denominator.
+    const s = summary({
+      revenue: 100000,
+      earningDays: 10,
+      dailyAverage: 10000,
+      workedShifts: [
+        ...Array.from({ length: 5 }, (_, i) => ({ date: `2026-07-1${i}`, revenue: 6000, trips: 5 })),
+        ...Array.from({ length: 5 }, (_, i) => ({ date: `2026-07-2${i}`, revenue: 14000, trips: 12 })),
+      ],
+    });
+    // The month's record.
+    expect(s.dailyAverage).toBe(10000);
+    // Current form, over the last seven worked days: two slow days and five good.
+    expect(rollingPace(s).perShift).toBe(11714);
+    expect(rollingPace(s).shifts).toBe(7);
+    expect(rollingPace(s).perShift).not.toBe(s.dailyAverage);
+  });
+
+  it('agrees with the month average when every day is the same', () => {
+    const flat = Array.from({ length: 7 }, (_, i) => ({ date: `2026-07-1${i}`, revenue: 12000, trips: 10 }));
+    const s = summary({ dailyAverage: 12000, earningDays: 7, workedShifts: flat });
+    expect(rollingPace(s).perShift).toBe(s.dailyAverage);
+  });
+});

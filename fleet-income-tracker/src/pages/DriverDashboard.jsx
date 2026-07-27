@@ -27,7 +27,8 @@ import VehicleMap from '../components/VehicleMap.jsx';
  *
  *   1. one number — what to drive today;
  *   2. one chart — where the month sits against the two thresholds;
- *   3. four supporting stats — pay so far, yesterday, best day, days left.
+ *   3. the supporting stats — pay, revenue, the daily average, yesterday, the
+ *      best day, and the days left.
  *
  * Then his own target, and the cash he is holding — the two things he has to
  * know that a number for today cannot tell him.
@@ -74,11 +75,32 @@ export default function DriverDashboard({ summary, month, setMonth, onRefresh })
         operatingDays={summary.operatingDays}
       />
 
-      {/* Four supporting stats, two by two on a phone. They sit BELOW the hero
-          and the ladder and can wrap freely; nothing here may push either of the
-          first two zones down the screen. */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* The supporting stats, two by two on a phone. They sit BELOW the hero and
+          the ladder and can wrap freely; nothing here may push either of the first
+          two zones down the screen.
+          Pay first — it is the only figure here that is his money. Revenue and the
+          daily average follow, neutral, because they are what the car took rather
+          than what he keeps. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Stat label="Your pay so far" value={money(summary.driverPay)} accent />
+        <Stat
+          label="Revenue this month"
+          value={money(summary.revenue)}
+          sub={`${count(summary.trips)} trips`}
+        />
+        {/* The month to date, over the days that earned. Deliberately labelled
+            against its denominator, because the goal block carries a rolling
+            average over the last few days and the two are different questions:
+            this one is the month's record, that one is current form. */}
+        <Stat
+          label="Average a day"
+          value={money(summary.dailyAverage)}
+          sub={
+            tripsPerDay(summary)
+              ? `over ${count(summary.earningDays)} days · ${tripsPerDay(summary)} trips a day`
+              : `over ${count(summary.earningDays)} day${summary.earningDays === 1 ? '' : 's'}`
+          }
+        />
         <Yesterday summary={summary} />
         <BestDay summary={summary} />
         {/* Called days, counted as shifts. A booked day off is not a day he can
@@ -334,7 +356,7 @@ function TargetBlock({ progress, summary, onSaved }) {
         {pace && (
           <Row
             label="Your pace"
-            hint={`over your last ${count(pace.shifts)} shift${pace.shifts === 1 ? '' : 's'}`}
+            hint={`recent form — your last ${count(pace.shifts)} day${pace.shifts === 1 ? '' : 's'}`}
             value={amount(pace.perShift)}
             trend={pace}
           />
