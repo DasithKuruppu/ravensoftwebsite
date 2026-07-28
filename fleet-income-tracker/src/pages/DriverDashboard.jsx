@@ -355,11 +355,18 @@ function TargetBlock({ progress, summary, onSaved }) {
 
   return (
     <div className="card">
-      <div className="flex items-baseline justify-between gap-3">
+      {/* The heading says what the card is about, so it has to show it: the
+          figure he actually set. The rows below open on his pace, which is what
+          "this pace pays you" needs in front of it — leaving the heading to
+          promise a goal the card did not display until the third row. */}
+      <div className="flex items-baseline gap-x-3 gap-y-1 flex-wrap">
         <h2 className="label">What you want to earn</h2>
+        <span className="num text-sm text-slate-100">
+          {money(progress.payStated)} <span className="text-slate-400">a month</span>
+        </span>
         <button
           onClick={() => setEditing(true)}
-          className="text-xs text-slate-300 underline underline-offset-2"
+          className="ml-auto text-xs text-slate-300 underline underline-offset-2"
         >
           Change
         </button>
@@ -390,10 +397,10 @@ function TargetBlock({ progress, summary, onSaved }) {
         />
 
         <Row
-          label="Your goal"
+          label={progress.prorated ? 'Your goal this month' : 'Your goal'}
           hint={
             progress.prorated
-              ? `${amount(progress.payStated)} a month, scaled to your ${count(summary.operatingDays)} days`
+              ? `this month's share — scaled to your ${count(summary.operatingDays)} days`
               : 'take-home, by month end'
           }
           value={money(progress.payWanted)}
