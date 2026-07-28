@@ -494,24 +494,21 @@ async function buildSummary(month, auth) {
     elapsedDays - offElapsed - earningDays - (todayAccounted ? 0 : 1),
   );
 
-  // The projection runs from the last day that HAS figures, not from today.
-  // Today has usually not been imported yet, so it is still a day expected to
-  // earn rather than a day that earned nothing.
-  const lastFiguresDate = entries
-    .filter((e) => !e.offDay && ((e.revenue || 0) > 0 || (e.trips || 0) > 0))
-    .map((e) => e.date)
-    .sort()
-    .pop();
+  // Days still expected to earn: TODAY and every operating day after it, less any
+  // already marked off.
+  //
+  // Counted from today rather than from the last day with figures. Two things
+  // were wrong with the old rule. A past day nobody had imported stayed in the
+  // count, so a gap in the data quietly bought an extra day to earn it back —
+  // spreading a shortfall over six days when five remained. And on a day whose
+  // figures HAD arrived, today dropped out of the count entirely, as though the
+  // shift ended when the import ran.
+  const todayDay = Number(todayInColombo().slice(8, 10));
   const firstOperatingDay = daysInMonth - operatingTotal + 1;
-  const lastFiguresDay = lastFiguresDate
-    ? Number(lastFiguresDate.slice(8, 10))
-    : firstOperatingDay - 1;
-  const offAfterFigures = entries.filter(
-    (e) => e.offDay && Number(e.date.slice(8, 10)) > lastFiguresDay,
+  const offFromToday = entries.filter(
+    (e) => e.offDay && Number(e.date.slice(8, 10)) >= todayDay,
   ).length;
-  // Days still expected to earn: every operating day after the last one with
-  // figures, less any already marked off.
-  const projectedDays = Math.max(0, daysInMonth - lastFiguresDay - offAfterFigures);
+  const projectedDays = Math.max(0, daysInMonth - todayDay + 1 - offFromToday);
 
   // Days the CAR ran, which is a different question and drives the per-day
   // costs. A day with GPS distance but no Uber trips still burned electricity,
@@ -525,8 +522,24 @@ async function buildSummary(month, auth) {
   ).length;
   const remainingWorkDays = Math.max(0, operatingTotal - elapsedDays - offAhead);
 
-  const dailyRate = earningDays > 0 ? revenue / earningDays : 0;
-  const projectedRevenue = round2(revenue + dailyRate * projectedDays);
+  // The pace, over COMPLETE days only.
+  //
+  // Today is a few hours of a shift. Averaging it in reports a fall in form that
+  // is really the clock — on the 27th it pulled the rate from 11,432 to 10,407 on
+  // the strength of a morning — and then the projection built on that rate is
+  // understated for the whole month.
+  const todayRevenue = round2(todayEntry && !todayEntry.offDay ? todayEntry.revenue || 0 : 0);
+  const paceDays = entries.filter(
+    (e) => !e.offDay && e.date < todayInColombo() && ((e.revenue || 0) > 0 || (e.trips || 0) > 0),
+  ).length;
+  const dailyRate = paceDays > 0 ? round2((revenue - todayRevenue) / paceDays) : earningDays > 0 ? revenue / earningDays : 0;
+
+  // Month end at that pace. Today counts for whichever is larger — what it has
+  // already taken, or what a day at this pace brings — because a shift that has
+  // done half a day's work by lunchtime has not finished at half a day.
+  const projectedRevenue = round2(
+    revenue - todayRevenue + dailyRate * Math.max(0, projectedDays - 1) + Math.max(dailyRate, todayRevenue),
+  );
   // Distance for usage-based costs. GPS first: the tracker sees every kilometre
   // the car moves, whereas Uber only counts the on-trip leg — and the car is
   // charged for all of it. Uber's figure is a fallback for days with no GPS.
@@ -552,7 +565,11 @@ async function buildSummary(month, auth) {
     projectedRevenue,
     yesterday: yesterdayRevenue(entries),
     today: dayRevenue(entries, todayInColombo()),
-    lastFiguresDay,
+    lastFiguresDay: entries
+      .filter((e) => !e.offDay && ((e.revenue || 0) > 0 || (e.trips || 0) > 0))
+      .map((e) => Number(e.date.slice(8, 10)))
+      .sort((a, b) => a - b)
+      .pop() ?? firstOperatingDay - 1,
   });
 
   const payload = {
@@ -601,10 +618,12 @@ async function buildSummary(month, auth) {
     // himself, see /settings/target — and the display layer works out the
     // revenue it needs from the plan that applies to this month.
     payTarget: settings.payTarget ?? null,
-    // Average per operating day elapsed — the same run-rate the projection
-    // extrapolates, so the two figures always agree with each other.
-    // Per day actually worked, so time off does not read as a bad day.
+    // The same run-rate the projection extrapolates, so the two figures always
+    // agree — over complete days worked, so neither time off nor a shift still in
+    // progress reads as a bad day.
     dailyAverage: round2(dailyRate),
+    // How many days that average is struck over, so the card can say.
+    paceDays,
     // When any of this last changed — an import, a GPS sync or a hand edit.
     lastUpdated: latestUpdate(entries),
     // Today so far. Incomplete by definition — the car is still out — so it is

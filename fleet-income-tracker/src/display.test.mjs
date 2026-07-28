@@ -14,9 +14,7 @@ import {
   revenueForPay,
   payTargetForMonth,
   paces,
-  goalReachable,
   goalRungs,
-  stretchCeiling,
   uberCut,
   farePer1000,
   chargingLens,
@@ -150,8 +148,7 @@ describe('perDayThreshold', () => {
       elapsedDays: elapsed,
       projectedDays: days - elapsed,
       revenue: onPace * elapsed,
-      // A believable best day, so no reachability cap interferes.
-      bestDay: { date: '2026-07-25', revenue: 16000 },
+        bestDay: { date: '2026-07-25', revenue: 16000 },
       payTarget: null,
     });
     const hero = dailyTarget(s);
@@ -203,73 +200,65 @@ describe('payAt', () => {
 });
 
 describe('dailyTarget', () => {
-  /** A modest goal — 60,000 take-home — so the top threshold is the harder ask. */
-  const modestGoal = { payTarget: 60000 };
-
-  it('below the band, leads with whichever ask is larger', () => {
-    // Default goal is 93,000 take-home = 350,000 revenue, past the 300,000
-    // threshold, so from 50,000 with twenty days left the goal is the binding
-    // constraint and the tier pace becomes the small print.
+  it('is the goal divided by the days left to reach it', () => {
+    // 93,000 take-home needs 350,000 of revenue. From 50,000 with twenty days
+    // left: 15,000 a day, and that is the whole derivation.
     const t = dailyTarget(summary({ revenue: 50000, projectedDays: 20 }));
     expect(t.kind).toBe('goal');
     expect(t.goal).toBe(350000);
     expect(t.amount).toBe(15000);
-    expect(t.secondary).toEqual({ amount: 12500, text: 'keeps your 50% zone safe' });
+    expect(t.context).toMatch(/to reach your goal/);
   });
 
-  it('leads with the tier when the goal is the easier of the two', () => {
-    // 60,000 take-home needs 274,000 of revenue — inside the band, so tier 3 at
-    // 300,000 is the harder ask and the one to act on.
-    const s = summary({ ...modestGoal, revenue: 260000, projectedDays: 8 });
+  it('mentions the tier only when it asks for more than the goal does', () => {
+    // A modest goal — 60,000 take-home, 274,000 of revenue — sits below the top
+    // threshold, so driving only the goal's pace would miss the 50% zone.
+    const s = summary({ payTarget: 60000, revenue: 200000, projectedDays: 8 });
     const t = dailyTarget(s);
-    expect(t.kind).toBe('tier');
-    // (300,000 − 260,000) / 8 = 5,000
-    expect(t.amount).toBe(5000);
-    expect(t.context).toMatch(/Closes the gap to your 50% zone/);
-    // Driving the harder ask carries the easier one with it — said, not implied.
-    expect(t.secondary.text).toMatch(/also closes your goal/);
-  });
-
-  it('says the pace is being held when the projection already clears tier 3', () => {
-    const t = dailyTarget(
-      summary({ ...modestGoal, revenue: 260000, projectedRevenue: 320000, projectedDays: 8 }),
-    );
-    expect(t.kind).toBe('tier');
-    expect(t.context).toMatch(/Keeps your 50% zone/);
-  });
-
-  it('once tier 3 is banked, switches to what he wants to earn', () => {
-    const t = dailyTarget(summary({ revenue: 300000, projectedDays: 5 }));
     expect(t.kind).toBe('goal');
-    expect(t.goal).toBe(350000);
-    // (350,000 − 300,000) / 5
-    expect(t.amount).toBe(10000);
-    expect(t.context).toMatch(/Closes your goal/);
+    expect(t.amount).toBe(9250);   // (274,000 − 200,000) / 8
+    expect(t.secondary).toEqual({ amount: 12500, text: 'is what your 50% zone needs' });
+
+    // And stays quiet when the goal already covers it.
+    expect(dailyTarget(summary({ revenue: 200000, projectedDays: 8 })).secondary).toBe(null);
   });
 
-  it('caps an impossible ask at a stretch on his best day', () => {
-    const t = dailyTarget(
-      summary({
-        revenue: 110840,
-        dailyAverage: 4434,
-        projectedDays: 4,
-        bestDay: { date: '2026-07-21', revenue: 5100 },
-      }),
-    );
-    expect(t.kind).toBe('strongest');
-    // 5,100 × 1.3 = 6,630 → tidied up to the next 50.
-    expect(t.amount).toBe(6650);
-    expect(t.context).toMatch(/strongest finish/);
-    // And it says what the goal would actually have needed, so the capped number
-    // reads as a cap rather than as arithmetic gone wrong.
-    expect(t.required).toBeGreaterThan(t.amount);
-    expect(t.secondary).toEqual({ amount: t.required, text: 'is what your goal would need a day' });
-  });
-
-  it('asks for the tier pace on a month with no history yet', () => {
-    const t = dailyTarget(summary({ ...modestGoal, revenue: 0, dailyAverage: 0, projectedDays: 31 }));
+  it('falls back to the top tier when no goal is set', () => {
+    const t = dailyTarget(summary({ payTarget: null, revenue: 260000, projectedDays: 8 }));
     expect(t.kind).toBe('tier');
-    expect(t.amount).toBe(9700);
+    expect(t.amount).toBe(5000);   // (300,000 − 260,000) / 8
+    expect(t.context).toMatch(/to reach your 50% zone/);
+  });
+
+  it('says "stay in" when the projection already clears the tier', () => {
+    const t = dailyTarget(
+      summary({ payTarget: null, revenue: 260000, projectedRevenue: 320000, projectedDays: 8 }),
+    );
+    expect(t.context).toMatch(/to stay in your 50% zone/);
+  });
+
+  it('celebrates once the goal is banked', () => {
+    const t = dailyTarget(summary({ revenue: 400000, dailyAverage: 15000, projectedDays: 4 }));
+    expect(t.kind).toBe('beyond');
+    expect(t.celebratory).toBe(true);
+    expect(t.amount).toBe(15000);
+  });
+
+  it('states what the goal needs, however large that is', () => {
+    // Best day 5,000 and a goal needing 59,800 a day. The screen says 59,800: a
+    // number that size is the useful signal — either the driving changes or the
+    // goal does — and a figure invented to stand in for it could be traced to
+    // nothing that ever happened.
+    const s = summary({
+      revenue: 110840,
+      projectedDays: 4,
+      dailyAverage: 4434,
+      bestDay: { date: '2026-07-21', revenue: 5000 },
+    });
+    const hero = dailyTarget(s);
+    expect(hero.kind).toBe('goal');
+    expect(hero.amount).toBe(59800);
+    expect(hero.amount).toBe(paces(s).goalPace);
   });
 
   it('reports the month as settled rather than dividing by no days', () => {
@@ -278,19 +267,15 @@ describe('dailyTarget', () => {
     expect(t.amount).toBe(50000);
   });
 
-  it('uses the rounded partial-month thresholds, so hero and ladder agree', () => {
-    // Prorated: tier 3 shows as 116,000 and the scaled goal needs 136,000.
+  it('uses the prorated, rounded thresholds in a partial month', () => {
     const s = summary({ prorationFactor: JULY_FACTOR, revenue: 50000, projectedDays: 6 });
-    const t = dailyTarget(s);
     expect(paces(s).tier3).toBe(116000);
-    expect(t.goal).toBe(136000);
+    expect(dailyTarget(s).goal).toBe(136000);
     // (136,000 − 50,000) / 6 = 14,333 → 14,350
-    expect(t.amount).toBe(14350);
-    // (116,000 − 50,000) / 6 = 11,000
-    expect(t.secondary).toEqual({ amount: 11000, text: 'keeps your 50% zone safe' });
+    expect(dailyTarget(s).amount).toBe(14350);
   });
 
-  it('scales the earnings goal to a partial month, and the plan with it', () => {
+  it('scales the earnings goal to a partial month', () => {
     const s = summary({ prorationFactor: JULY_FACTOR, revenue: 130000, projectedDays: 4 });
     expect(payTargetForMonth(s)).toBe(36000);
     expect(targetForMonth(s)).toBe(136000);
@@ -365,129 +350,32 @@ describe('targetProgress', () => {
   });
 });
 
-describe('paces — the binding constraint', () => {
-  /** Both paces over the same four remaining days, with a believable best day. */
-  const base = (over) =>
-    summary({ projectedDays: 4, bestDay: { date: '2026-07-22', revenue: 20000 }, ...over });
+describe('paces', () => {
+  /** Both paces over the same four remaining days. */
+  const base = (over) => summary({ projectedDays: 4, ...over });
 
-  it('picks the goal when the goal needs more per day', () => {
-    // 93,000 take-home needs 350,000 revenue. From 300,000 with four days left
-    // the goal needs 12,500 a day; tier 3 is already banked, so it needs nothing.
+  it('measures both against the same days left', () => {
+    const p = paces(base({ revenue: 200000 }));
+    // Tier 3 at 300,000 and the goal's 350,000, each over four days.
+    expect(p.tierPace).toBe(25000);
+    expect(p.goalPace).toBe(37500);
+    expect(p.daysLeft).toBe(4);
+  });
+
+  it('reports a banked target as needing nothing', () => {
     const p = paces(base({ revenue: 300000 }));
     expect(p.tierPace).toBe(0);
     expect(p.goalPace).toBe(12500);
-    expect(p.binding).toBe('goal');
-    expect(p.required).toBe(12500);
-
-    const hero = dailyTarget(base({ revenue: 300000 }));
-    expect(hero.kind).toBe('goal');
-    expect(hero.amount).toBe(12500);
-    expect(hero.context).toMatch(/Closes your goal/);
   });
 
-  it('picks the tier when the tier needs more per day', () => {
-    // Below tier 3, and the goal is only a little further on: tier 3 needs
-    // (300,000 − 240,000) / 4 = 15,000, the goal (350,000 − 240,000) / 4 =
-    // 27,500 — so raise the goal's reach by lowering it instead.
-    const s = base({ revenue: 280000, payTarget: 55000 });
-    const p = paces(s);
-    // 55,000 take-home needs 256,667 → already banked.
+  it('has no goal pace when no goal is set', () => {
+    expect(paces(base({ payTarget: null })).goalPace).toBe(null);
+  });
+
+  it('never asks for a negative amount', () => {
+    const p = paces(base({ revenue: 500000 }));
+    expect(p.tierPace).toBe(0);
     expect(p.goalPace).toBe(0);
-    expect(p.tierPace).toBe(5000);
-    expect(p.binding).toBe('tier');
-
-    const hero = dailyTarget(s);
-    expect(hero.kind).toBe('tier');
-    expect(hero.amount).toBe(5000);
-    // The secondary line says the goal is already in the bank rather than
-    // printing a second, smaller instruction.
-    expect(hero.secondary.text).toMatch(/already banked/);
-  });
-
-  it('shows the tier pace as the secondary line when the goal is binding', () => {
-    // 200,000 banked: tier 3 needs 25,000 a day, the goal 37,500 — the goal wins
-    // and the tier pace becomes the small print.
-    const s = base({ revenue: 200000, bestDay: { date: '2026-07-22', revenue: 40000 } });
-    const p = paces(s);
-    expect(p.tierPace).toBe(25000);
-    expect(p.goalPace).toBe(37500);
-    expect(p.binding).toBe('goal');
-
-    const hero = dailyTarget(s);
-    expect(hero.amount).toBe(37500);
-    expect(hero.secondary).toEqual({ amount: 25000, text: 'keeps your 50% zone safe' });
-  });
-
-  it('resolves a tie to the goal, so the harder promise is the one shown', () => {
-    // Contrive equal paces: goal revenue == tier 3 threshold.
-    const s = base({ revenue: 200000, payTarget: 68000 });
-    const p = paces(s);
-    expect(p.goalRevenue).toBe(300000);
-    expect(p.goalPace).toBe(p.tierPace);
-    expect(p.binding).toBe('goal');
-  });
-
-  it('celebrates when both are banked instead of inventing an instruction', () => {
-    const hero = dailyTarget(base({ revenue: 400000, dailyAverage: 15000 }));
-    expect(hero.kind).toBe('beyond');
-    expect(hero.celebratory).toBe(true);
-  });
-
-  it('never issues an instruction above a stretch on his best day', () => {
-    // Best day 5,000 → ceiling 6,500. Tier 3 alone would need 47,300 a day.
-    const s = summary({
-      revenue: 110840,
-      projectedDays: 4,
-      dailyAverage: 4434,
-      bestDay: { date: '2026-07-21', revenue: 5000 },
-    });
-    const hero = dailyTarget(s);
-    expect(hero.kind).toBe('strongest');
-    expect(hero.amount).toBe(6500);
-    expect(hero.amount).toBeLessThanOrEqual(stretchCeiling(s));
-  });
-});
-
-describe('goal reachability at the 1.3x boundary', () => {
-  /** A month where the goal needs exactly `perDay` from the remaining days. */
-  const needing = (perDay, bestDayRevenue) => {
-    const daysLeft = 4;
-    const goalRevenue = 350000; // 93,000 take-home on the default plan
-    return summary({
-      revenue: goalRevenue - perDay * daysLeft,
-      projectedDays: daysLeft,
-      bestDay: { date: '2026-07-22', revenue: bestDayRevenue },
-    });
-  };
-
-  it('is reachable exactly at 1.3x the best day', () => {
-    // best 10,000 → ceiling 13,000, and a goal needing exactly 13,000 stands.
-    const s = needing(13000, 10000);
-    expect(paces(s).goalPace).toBe(13000);
-    expect(goalReachable(s)).toBe(true);
-    expect(dailyTarget(s).kind).toBe('goal');
-    expect(targetProgress(s).reachable).toBe(true);
-  });
-
-  it('is out of reach just past it', () => {
-    // 13,050 needed against the same 13,000 ceiling.
-    const s = needing(13050, 10000);
-    expect(paces(s).goalPace).toBe(13050);
-    expect(goalReachable(s)).toBe(false);
-    expect(dailyTarget(s).kind).toBe('strongest');
-  });
-
-  it('reframes the goal block as a best case rather than an instruction', () => {
-    const s = needing(20000, 10000);
-    const p = targetProgress(s);
-    expect(p.reachable).toBe(false);
-    // Four best days from here, priced through the real tier function.
-    expect(p.bestCasePay).toBe(Math.round(payAt(s.revenue + 10000 * 4, s)));
-    expect(p.bestCaseGain).toBeGreaterThanOrEqual(0);
-  });
-
-  it('treats a month with no history as reachable', () => {
-    expect(goalReachable(summary({ revenue: 0, projectedDays: 31 }))).toBe(true);
   });
 });
 
@@ -691,8 +579,6 @@ describe('one denominator across the screen', () => {
     operatingDays: 31,
     elapsedDays: 25,
     dailyAverage: 8000,
-    // Big enough that the reachability cap does not bite: this test is about the
-    // denominator, and the cap has its own suite.
     bestDay: { date: '2026-07-22', revenue: 30000 },
   };
 
@@ -893,14 +779,11 @@ describe('the days-left label is a label', () => {
 });
 
 describe('best day', () => {
-  it('is the same figure the reachability cap is struck against', () => {
+  it('is the figure the best-day card shows', () => {
     const s = summary({ bestDay: { date: '2026-07-24', revenue: 16984, trips: 23 } });
     const best = bestRecordedDay(s);
     expect(best.revenue).toBe(16984);
     expect(best.trips).toBe(23);
-    // The stat card and the cap read one helper, so the ceiling shown and the
-    // ceiling enforced cannot drift apart.
-    expect(stretchCeiling(s)).toBeCloseTo(16984 * 1.3, 6);
     expect(paces(s).best.revenue).toBe(best.revenue);
   });
 
@@ -1239,7 +1122,7 @@ describe("today is not a finished day", () => {
 });
 
 describe('a goal far out of reach', () => {
-  it('caps the instruction but shows what the goal would need', () => {
+  it('states the requirement rather than substituting for it', () => {
     // 800,000 a month against a best day of 16,984: the goal needs nine times his
     // best day, so the hero shows the most he could credibly do and names the real
     // requirement beside it.
@@ -1250,13 +1133,15 @@ describe('a goal far out of reach', () => {
       bestDay: { date: '2026-07-25', revenue: 16983.53, trips: 13 },
     });
     const hero = dailyTarget(s);
-    expect(hero.kind).toBe('strongest');
-    expect(hero.amount).toBe(22100);          // 16,983.53 × 1.3, tidied up
-    expect(hero.required).toBeGreaterThan(400000);
-    expect(hero.secondary.amount).toBe(hero.required);
-    // The goal block agrees, and is in its best-case framing.
-    expect(targetProgress(s).reachable).toBe(false);
-    expect(targetProgress(s).gapPerDay).toBe(hero.required);
+    expect(hero.kind).toBe('goal');
+    // What the goal actually needs — not a figure invented to stand in for it.
+    // 800,000 take-home needs 1,764,000 of revenue; from 72,852 over four days
+    // that is 422,800 a day, and saying so is the only useful thing the screen
+    // can do with a goal of this size.
+    expect(hero.amount).toBe(paces(s).goalPace);
+    expect(hero.amount).toBeGreaterThan(400000);
+    // And the goal block says the same, in the same rows it always uses.
+    expect(targetProgress(s).gapPerDay).toBe(hero.amount);
   });
 
   it('scales the goal to the month before deciding any of that', () => {

@@ -397,39 +397,15 @@ function TargetBlock({ progress, summary, onSaved }) {
 
         {progress.banked ? (
           <Row label="Already banked" value="✓" tone="text-accent" />
-        ) : progress.reachable ? (
-          <Row
-            label="Gap per shift"
-            hint={`× ${count(progress.daysLeft)} day${progress.daysLeft === 1 ? '' : 's'} left`}
-            value={amount(progress.gapPerDay)}
-            tone="text-warn"
-          />
         ) : (
           <Row
-            label="Gap per shift"
-            hint={`above your best day of ${amount(progress.best.revenue)}`}
+            label="Gap per day"
+            hint={`× ${count(progress.daysLeft)} day${progress.daysLeft === 1 ? '' : 's'} left`}
             value={amount(progress.gapPerDay)}
             tone="text-warn"
           />
         )}
       </dl>
-
-      {/* Out of reach: say what IS reachable instead of repeating the ask. */}
-      {!progress.banked && !progress.reachable && progress.bestCasePay !== null && (
-        <dl className="mt-3 pt-3 border-t border-ink-700 space-y-2">
-          <Row
-            label={`${count(progress.daysLeft)} best days would pay`}
-            hint={`at ${amount(progress.best.revenue)} a day`}
-            value={money(progress.bestCasePay)}
-            tone="text-accent"
-          />
-          <Row
-            label="Better than this pace by"
-            value={money(progress.bestCaseGain)}
-            tone="text-accent"
-          />
-        </dl>
-      )}
     </div>
   );
 }

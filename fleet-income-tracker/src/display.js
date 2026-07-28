@@ -272,23 +272,6 @@ export function bestRecordedDay(summary) {
   return null;
 }
 
-/**
- * How far above his best day an instruction is still worth printing.
- *
- * Arithmetic alone will happily produce "drive 47,300 today" — that is what
- * closing a 189,000 gap in four days costs — and a screen that asks a man whose
- * best day is 5,000 for nine times that is not motivating, it is noise he learns
- * to ignore. A third above his best day is a stretch; anything past it is a
- * fantasy, and the goal block says so in words instead.
- */
-export const STRETCH_MULTIPLE = 1.3;
-
-/** The ceiling on any instruction number, or Infinity when nothing is recorded. */
-export function stretchCeiling(summary) {
-  const best = bestRecordedDay(summary);
-  return best ? best.revenue * STRETCH_MULTIPLE : Infinity;
-}
-
 /** Round a daily ask to something a person would say out loud. */
 function tidyDaily(n) {
   if (!Number.isFinite(n) || n <= 0) return 0;
@@ -344,108 +327,78 @@ export function paces(summary) {
     tier3,
     goalRevenue,
     binding,
-    // What the larger of the two asks for, before any reachability cap.
+    // What the larger of the two asks for.
     required: Math.max(tierPace || 0, goalPace || 0),
-    ceiling: stretchCeiling(summary),
     best: bestRecordedDay(summary),
   };
 }
 
-/** Is the goal still worth expressing as an instruction, or only as a best case? */
-export function goalReachable(summary) {
-  const { goalPace, ceiling } = paces(summary);
-  if (!goalPace) return true;
-  return goalPace <= ceiling;
-}
-
 /**
- * The hero number: the binding constraint, and what it buys.
+ * The hero number: what today has to bring in.
  *
- * One instruction per screen. The headline is the larger of the two paces, the
- * smaller one becomes a secondary line so nothing on the page contradicts it, and
- * neither is ever allowed to exceed a third above his best recorded day —
- * an instruction he cannot act on is worse than no instruction.
+ * It is the goal, divided by the days left to reach it. Nothing else — no cap, no
+ * substituted figure, no cleverness. A goal is a statement of intent, and the
+ * screen's job is to say what it costs per day, not to decide the driver cannot
+ * have it: an ask of 152,550 says the goal needs rethinking, which is information,
+ * and a capped 22,100 in its place says nothing at all and cannot be traced back
+ * to anything.
+ *
+ * With no goal set there is nothing to divide, so it falls back to the top tier —
+ * the only other target the month has.
  *
  * States:
- *   goal       his own earnings goal is the harder of the two
- *   tier       the top threshold is the harder of the two
- *   strongest  the goal needs more than his best day plus a third; the ask
- *              becomes his strongest realistic finish and the goal block
- *              switches to best-case framing
- *   beyond     both banked — celebrate, and show the pace he is holding
- *   done       no days left; the month is decided, so show the pay
+ *   goal    what each remaining day needs to reach the month's goal
+ *   tier    the same, for the top threshold, when no goal is set
+ *   beyond  banked — celebrate, and show the pace he is holding
+ *   done    no days left; the month is decided, so show the pay
  *
- * "Banked" always reads off revenue EARNED, never the projection: a forecast that
- * says he will get there is not the same as getting there.
+ * "Banked" reads off revenue EARNED, never the projection: a forecast that says he
+ * will get there is not the same as getting there.
  */
 export function dailyTarget(summary) {
   if (!summary) return null;
   const p = paces(summary);
   if (p.daysLeft <= 0) return monthOver(summary);
 
-  if (p.required <= 0) {
-    return {
-      kind: 'beyond',
-      amount: tidyDaily(summary.dailyAverage || 0),
-      goal: null,
-      daysLeft: p.daysLeft,
-      context: 'Your pace — and you keep half of every rupee now',
-      secondary: null,
-      celebratory: true,
-    };
-  }
-
-  const capped = Math.min(p.required, p.ceiling);
-  const tierLine = p.tierPace > 0 ? `${p.tierPace} keeps your 50% zone safe` : null;
-
-  // Beyond a stretch: name it as his strongest finish rather than pretending the
-  // goal is one more ordinary day away.
-  //
-  // The context says what the goal ACTUALLY needs. Without that figure the hero
-  // is a number with no visible derivation — set a goal of 800,000 a month and it
-  // prints 22,100, which reads as broken scaling rather than as a cap. Saying
-  // "your goal needs 152,550 a day" makes both the cap and the goal legible in one
-  // line, and lets him judge whether the goal is the thing that is wrong.
-  if (capped < p.required) {
-    return {
-      kind: 'strongest',
-      amount: tidyDaily(capped),
-      goal: null,
-      daysLeft: p.daysLeft,
-      required: p.required,
-      context: 'Your strongest finish',
-      secondary: { amount: p.required, text: 'is what your goal would need a day' },
-      celebratory: false,
-    };
-  }
-
-  if (p.binding === 'goal') {
+  // His own goal comes first when he has one: it is the target he chose.
+  if (p.goalPace > 0) {
     return {
       kind: 'goal',
       amount: p.goalPace,
       goal: p.goalRevenue,
       daysLeft: p.daysLeft,
-      context: 'Closes your goal',
-      secondary: p.tierPace > 0 ? { amount: p.tierPace, text: 'keeps your 50% zone safe' } : null,
+      context: 'every day, to reach your goal this month',
+      // The tier line, when it asks for more than the goal does — driving only the
+      // goal's pace would then miss the threshold, which is worth one quiet line.
+      secondary:
+        p.tierPace > p.goalPace ? { amount: p.tierPace, text: 'is what your 50% zone needs' } : null,
+      celebratory: false,
+    };
+  }
+
+  if (p.tierPace > 0) {
+    return {
+      kind: 'tier',
+      amount: p.tierPace,
+      goal: p.tier3,
+      daysLeft: p.daysLeft,
+      context:
+        (summary.projectedRevenue || 0) >= p.tier3
+          ? 'every day, to stay in your 50% zone'
+          : 'every day, to reach your 50% zone',
+      secondary: null,
       celebratory: false,
     };
   }
 
   return {
-    kind: 'tier',
-    amount: p.tierPace,
-    goal: p.tier3,
+    kind: 'beyond',
+    amount: tidyDaily(summary.dailyAverage || 0),
+    goal: null,
     daysLeft: p.daysLeft,
-    context: (summary.projectedRevenue || 0) >= p.tier3 ? 'Keeps your 50% zone' : 'Closes the gap to your 50% zone',
-    // The tier pace is the harder ask, so it carries the goal with it. Said
-    // plainly rather than left for him to work out.
-    secondary:
-      p.goalPace === 0
-        ? { amount: null, text: 'Your goal is already banked' }
-        : p.goalPace > 0
-          ? { amount: null, text: 'This also closes your goal' }
-          : null,
-    celebratory: false,
+    context: 'your pace — and you keep half of every rupee now',
+    secondary: null,
+    celebratory: true,
   };
 }
 
@@ -470,9 +423,9 @@ function monthOver(summary) {
  * came to hold two different "per day" figures that could not both be right.
  * Everything here is per REMAINING day.
  *
- * When the goal needs more than a stretch above his best day, `reachable` is
- * false and the block reframes as a best case rather than an instruction — a
- * dying goal that keeps demanding the impossible is a goal he stops reading.
+ * The rows are the same whatever the state. A goal that needs more than he has
+ * ever driven says so by the size of its own number, which is information he can
+ * act on — by driving harder, or by moving the goal.
  */
 export function targetProgress(summary) {
   const payWanted = payTargetForMonth(summary);
@@ -480,13 +433,7 @@ export function targetProgress(summary) {
   if (payWanted === null || goalRevenue === null) return null;
 
   const p = paces(summary);
-  const best = p.best;
   const payAtPace = Math.round(payAt(summary.projectedRevenue || 0, summary));
-  const reachable = !p.goalPace || p.goalPace <= p.ceiling;
-
-  // What a run of his best days from here would actually pay.
-  const bestCaseRevenue = best ? (summary.revenue || 0) + best.revenue * p.daysLeft : null;
-  const bestCasePay = bestCaseRevenue === null ? null : Math.round(payAt(bestCaseRevenue, summary));
 
   return {
     payWanted,
@@ -500,11 +447,6 @@ export function targetProgress(summary) {
     payAtPace,
     payAtGoal: Math.round(payAt(goalRevenue, summary)),
     banked: p.goalPace === 0,
-    reachable,
-    best,
-    bestCasePay,
-    // What a strong finish is worth over simply carrying on as now.
-    bestCaseGain: bestCasePay === null ? null : Math.max(0, bestCasePay - payAtPace),
   };
 }
 

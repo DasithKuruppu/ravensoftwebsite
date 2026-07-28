@@ -572,3 +572,91 @@ describe('a settings row that predates the Uber fields', () => {
     expect(res.body.uberCommissionRate).toBe(0.2);
   });
 });
+
+describe('the projection and a shift still in progress', () => {
+  beforeEach(async () => {
+    const { store, DEFAULT_DRIVER } = await import('./store.mjs');
+    const { todayInColombo } = await import('./handler.mjs');
+    const month = todayInColombo().slice(0, 7);
+    for (const e of await store.queryMonth(DEFAULT_DRIVER, month)) {
+      await store.deleteEntry(DEFAULT_DRIVER, e.date);
+    }
+    await store.putSettings(DEFAULT_DRIVER, {
+      ...(await store.getSettings(DEFAULT_DRIVER)),
+      startDate: null,
+    });
+  });
+
+  /** yyyy-mm-dd, n days before today. */
+  async function daysAgo(n) {
+    const { todayInColombo } = await import('./handler.mjs');
+    return new Date(Date.parse(`${todayInColombo()}T00:00:00Z`) - n * 86400000)
+      .toISOString()
+      .slice(0, 10);
+  }
+
+  it('strikes the pace over complete days, not the hours so far today', async () => {
+    const { importRows, todayInColombo } = await import('./handler.mjs');
+    await importRows([
+      { date: await daysAgo(2), revenue: '12000', trips: '10' },
+      { date: await daysAgo(1), revenue: '12000', trips: '10' },
+      // Today: three trips by lunchtime.
+      { date: todayInColombo(), revenue: '3000', trips: '3' },
+    ]);
+
+    const res = await call('GET', '/summary', { token: driverToken });
+    // 24,000 over the two days that finished. Averaging today's morning in would
+    // have said 9,000 — a fall in form that is really the clock.
+    expect(res.body.dailyAverage).toBe(12000);
+    expect(res.body.paceDays).toBe(2);
+  });
+
+  it('expects today to finish at the pace, not at what it has so far', async () => {
+    const { importRows, todayInColombo, daysInMonthOf } = await import('./handler.mjs');
+    const today = todayInColombo();
+    await importRows([
+      { date: await daysAgo(2), revenue: '12000', trips: '10' },
+      { date: await daysAgo(1), revenue: '12000', trips: '10' },
+      { date: today, revenue: '3000', trips: '3' },
+    ]);
+
+    const res = await call('GET', '/summary', { token: driverToken });
+    const left = daysInMonthOf(today.slice(0, 7)) - Number(today.slice(8, 10)) + 1;
+    // Today counts for a full day at the pace rather than for its morning, and
+    // every day after it likewise.
+    expect(res.body.projectedDays).toBe(left);
+    expect(res.body.projectedRevenue).toBe(24000 + 12000 * left);
+  });
+
+  it('counts today among the days left, and a booked day off out of them', async () => {
+    const { importRows, todayInColombo, daysInMonthOf } = await import('./handler.mjs');
+    const today = todayInColombo();
+    const month = today.slice(0, 7);
+    const days = daysInMonthOf(month);
+    await importRows([{ date: await daysAgo(1), revenue: '12000', trips: '10' }]);
+
+    const before = await call('GET', '/summary', { token: driverToken });
+    expect(before.body.projectedDays).toBe(days - Number(today.slice(8, 10)) + 1);
+
+    // Book the last day of the month off.
+    await call('PUT', `/entries/${month}-${String(days).padStart(2, '0')}/off`, {
+      token: driverToken,
+      body: { off: true },
+    });
+    const after = await call('GET', '/summary', { token: driverToken });
+    expect(after.body.projectedDays).toBe(before.body.projectedDays - 1);
+  });
+
+  it('does not let an unimported past day buy an extra day to earn it back', async () => {
+    const { importRows, todayInColombo, daysInMonthOf } = await import('./handler.mjs');
+    const today = todayInColombo();
+    // Figures three days old, nothing since: the days between are simply missing.
+    await importRows([{ date: await daysAgo(3), revenue: '9000', trips: '8' }]);
+
+    const res = await call('GET', '/summary', { token: driverToken });
+    // Counted from today, so the gap does not extend the month.
+    expect(res.body.projectedDays).toBe(
+      daysInMonthOf(today.slice(0, 7)) - Number(today.slice(8, 10)) + 1,
+    );
+  });
+});
