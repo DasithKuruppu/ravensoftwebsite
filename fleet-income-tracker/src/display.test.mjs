@@ -260,6 +260,10 @@ describe('dailyTarget', () => {
     // 5,100 × 1.3 = 6,630 → tidied up to the next 50.
     expect(t.amount).toBe(6650);
     expect(t.context).toMatch(/strongest finish/);
+    // And it says what the goal would actually have needed, so the capped number
+    // reads as a cap rather than as arithmetic gone wrong.
+    expect(t.required).toBeGreaterThan(t.amount);
+    expect(t.secondary).toEqual({ amount: t.required, text: 'is what your goal would need a day' });
   });
 
   it('asks for the tier pace on a month with no history yet', () => {
@@ -1231,5 +1235,35 @@ describe("today is not a finished day", () => {
   it('says nothing about form when today is all there is', () => {
     const s = summary({ workedShifts: [{ date: '2026-07-27', revenue: 4262.99, trips: 3 }] });
     expect(rollingPace(s, 7, '2026-07-27')).toBe(null);
+  });
+});
+
+describe('a goal far out of reach', () => {
+  it('caps the instruction but shows what the goal would need', () => {
+    // 800,000 a month against a best day of 16,984: the goal needs nine times his
+    // best day, so the hero shows the most he could credibly do and names the real
+    // requirement beside it.
+    const s = summary({
+      payTarget: 800000,
+      revenue: 72852.02,
+      projectedDays: 4,
+      bestDay: { date: '2026-07-25', revenue: 16983.53, trips: 13 },
+    });
+    const hero = dailyTarget(s);
+    expect(hero.kind).toBe('strongest');
+    expect(hero.amount).toBe(22100);          // 16,983.53 × 1.3, tidied up
+    expect(hero.required).toBeGreaterThan(400000);
+    expect(hero.secondary.amount).toBe(hero.required);
+    // The goal block agrees, and is in its best-case framing.
+    expect(targetProgress(s).reachable).toBe(false);
+    expect(targetProgress(s).gapPerDay).toBe(hero.required);
+  });
+
+  it('scales the goal to the month before deciding any of that', () => {
+    const s = summary({ payTarget: 800000, prorationFactor: JULY_FACTOR });
+    // 800,000 × 12/31, and the revenue that take-home needs on the prorated plan.
+    expect(payTargetForMonth(s)).toBe(309677);
+    expect(targetForMonth(s)).toBe(683000);
+    expect(payAt(683000, s)).toBeGreaterThanOrEqual(309677);
   });
 });

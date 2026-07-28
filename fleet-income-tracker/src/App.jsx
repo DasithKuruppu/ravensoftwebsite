@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
-import { api, getToken, getRole, setSession } from './api.js';
+import { api, getToken, getRole, setSession, getDriverName, rememberDriverName } from './api.js';
 import Dashboard from './pages/Dashboard.jsx';
 import DailyLog from './pages/DailyLog.jsx';
 import Validate from './pages/Validate.jsx';
@@ -11,7 +11,7 @@ import { currentMonth } from './format.js';
 export default function App() {
   const [role, setRole] = useState(() => (getToken() ? getRole() : null));
   const [month, setMonth] = useState(currentMonth);
-  const [driverName, setDriverName] = useState('');
+  const [driverName, setDriverName] = useState(getDriverName);
 
   // The API client fires this whenever a call comes back 401 (expired token).
   useEffect(() => {
@@ -28,6 +28,13 @@ export default function App() {
   const handleLogout = useCallback(() => {
     setSession(null, null);
     setRole(null);
+    setDriverName('');
+  }, []);
+
+  /** The summary is the only call that knows the name; hold on to it. */
+  const handleDriverName = useCallback((name) => {
+    setDriverName(name || '');
+    rememberDriverName(name);
   }, []);
 
   if (!role) return <Login onLogin={handleLogin} />;
@@ -51,7 +58,7 @@ export default function App() {
                 month={month}
                 setMonth={setMonth}
                 isOwner={isOwner}
-                onDriverName={setDriverName}
+                onDriverName={handleDriverName}
               />
             }
           />
@@ -206,11 +213,14 @@ function Header({ role, isOwner, onLogout }) {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Owner only: on the driver's own screen a badge naming him is a
-              third-person label in a view written entirely in the second. */}
-          {isOwner && (
-            <span className="text-xs px-2 py-1 rounded bg-ink-800 text-slate-300">{role}</span>
-          )}
+          {/* Who is signed in. For the driver that is his name rather than his
+              job title — it is the one place on his screens a name belongs,
+              because it answers "whose phone is this logged into", not "how is
+              Chandima doing". Truncated rather than allowed to push the sign-out
+              button off a 380px header. */}
+          <span className="text-xs px-2 py-1 rounded bg-ink-800 text-slate-300 max-w-[9rem] truncate">
+            {role}
+          </span>
           <button
             onClick={onLogout}
             className="text-sm text-slate-400 hover:text-slate-200 whitespace-nowrap"

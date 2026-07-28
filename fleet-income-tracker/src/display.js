@@ -400,14 +400,21 @@ export function dailyTarget(summary) {
 
   // Beyond a stretch: name it as his strongest finish rather than pretending the
   // goal is one more ordinary day away.
+  //
+  // The context says what the goal ACTUALLY needs. Without that figure the hero
+  // is a number with no visible derivation — set a goal of 800,000 a month and it
+  // prints 22,100, which reads as broken scaling rather than as a cap. Saying
+  // "your goal needs 152,550 a day" makes both the cap and the goal legible in one
+  // line, and lets him judge whether the goal is the thing that is wrong.
   if (capped < p.required) {
     return {
       kind: 'strongest',
       amount: tidyDaily(capped),
       goal: null,
       daysLeft: p.daysLeft,
-      context: 'Your strongest finish — your goal needs more than this',
-      secondary: p.tierPace > 0 && p.tierPace <= p.ceiling ? { amount: p.tierPace, text: 'keeps your 50% zone safe' } : null,
+      required: p.required,
+      context: 'Your strongest finish',
+      secondary: { amount: p.required, text: 'is what your goal would need a day' },
       celebratory: false,
     };
   }

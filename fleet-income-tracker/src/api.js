@@ -7,6 +7,10 @@ const BASE = import.meta.env.VITE_API_URL || '/api';
 
 const TOKEN_KEY = 'fleet.token';
 const ROLE_KEY = 'fleet.role';
+// The driver's name arrives with the dashboard summary. Remembering it means a
+// page that never asks for one — the daily log, say, opened directly — still
+// knows who is signed in.
+const NAME_KEY = 'fleet.driverName';
 
 /**
  * localStorage, or nothing.
@@ -29,6 +33,16 @@ export function getRole() {
   return store?.getItem(ROLE_KEY) || null;
 }
 
+export function getDriverName() {
+  return store?.getItem(NAME_KEY) || '';
+}
+
+export function rememberDriverName(name) {
+  if (!store) return;
+  if (name) store.setItem(NAME_KEY, name);
+  else store.removeItem(NAME_KEY);
+}
+
 export function setSession(token, role) {
   memoryToken = token;
   if (!store) return;
@@ -38,6 +52,9 @@ export function setSession(token, role) {
   } else {
     store.removeItem(TOKEN_KEY);
     store.removeItem(ROLE_KEY);
+    // Signing out forgets who it was, so the next person to sign in on this
+    // phone is not greeted by somebody else's name.
+    store.removeItem(NAME_KEY);
   }
 }
 
