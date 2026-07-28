@@ -365,44 +365,63 @@ function TargetBlock({ progress, summary, onSaved }) {
         </button>
       </div>
 
-      <dl className="mt-3 space-y-2">
-        <Row
-          label="Your goal"
-          hint={
-            progress.prorated
-              ? `${amount(progress.payStated)} a month, scaled to your ${count(summary.operatingDays)} days`
-              : 'paid at the end of the month'
-          }
-          value={money(progress.payWanted)}
-        />
-        <Row
-          label="This pace pays you"
-          hint="at month end"
-          value={money(progress.payAtPace)}
-          tone="text-accent"
-        />
+      {/* The pace comes first, and "this pace" then has something to point at.
+          The row used to sit under the goal, where it named neither which pace
+          nor what it was measured against, and read as though it might be
+          describing the goal itself.
 
-        {/* His pace, and the only place on this screen it appears. Rolling over
-            the last worked shifts rather than month-to-date: by the 25th a
-            month average is mostly days he cannot change, and it barely moves
-            however he drives today. Revenue, so it stays neutral. */}
+          Top to bottom it is one argument: what you are doing, what that pays,
+          what you wanted, the difference, and what closing it costs a day. */}
+      <dl className="mt-3 space-y-2">
         {pace && (
           <Row
             label="Your pace"
-            hint={`recent form — your last ${count(pace.shifts)} day${pace.shifts === 1 ? '' : 's'}`}
+            hint={`a day, over your last ${count(pace.shifts)} day${pace.shifts === 1 ? '' : 's'}`}
             value={amount(pace.perShift)}
             trend={pace}
           />
         )}
 
+        <Row
+          label="This pace pays you"
+          hint="take-home, by month end"
+          value={money(progress.payAtPace)}
+          tone="text-accent"
+        />
+
+        <Row
+          label="Your goal"
+          hint={
+            progress.prorated
+              ? `${amount(progress.payStated)} a month, scaled to your ${count(summary.operatingDays)} days`
+              : 'take-home, by month end'
+          }
+          value={money(progress.payWanted)}
+        />
+
         {progress.banked ? (
-          <Row label="Already banked" value="✓" tone="text-accent" />
+          <Row label="Goal already banked" value="✓" tone="text-accent" />
+        ) : progress.shortfall > 0 ? (
+          <>
+            <Row
+              label="Short by"
+              hint="in take-home"
+              value={money(progress.shortfall)}
+              tone="text-warn"
+            />
+            <Row
+              label="To close it"
+              hint={`a day to drive, over ${count(progress.daysLeft)} day${progress.daysLeft === 1 ? '' : 's'} left`}
+              value={amount(progress.gapPerDay)}
+              tone="text-warn"
+            />
+          </>
         ) : (
           <Row
-            label="Gap per day"
-            hint={`× ${count(progress.daysLeft)} day${progress.daysLeft === 1 ? '' : 's'} left`}
-            value={amount(progress.gapPerDay)}
-            tone="text-warn"
+            label="Past your goal by"
+            hint="in take-home"
+            value={money(Math.abs(progress.shortfall))}
+            tone="text-accent"
           />
         )}
       </dl>

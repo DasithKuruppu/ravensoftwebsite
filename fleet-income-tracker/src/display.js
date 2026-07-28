@@ -447,6 +447,9 @@ export function targetProgress(summary) {
     payAtPace,
     payAtGoal: Math.round(payAt(goalRevenue, summary)),
     banked: p.goalPace === 0,
+    // The comparison as its own figure, in take-home, so nobody has to subtract
+    // two numbers that sit rows apart.
+    shortfall: Math.round(payWanted - payAtPace),
   };
 }
 

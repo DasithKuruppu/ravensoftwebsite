@@ -319,6 +319,19 @@ describe('revenueForPay', () => {
 });
 
 describe('targetProgress', () => {
+  it('states the shortfall in take-home, so nobody has to subtract two rows', () => {
+    const p = targetProgress(summary({ revenue: 100000, projectedRevenue: 283333, projectedDays: 20 }));
+    // 93,000 wanted, 63,000 on this pace.
+    expect(p.payWanted).toBe(93000);
+    expect(p.payAtPace).toBe(63000);
+    expect(p.shortfall).toBe(30000);
+  });
+
+  it('reports being past the goal as a negative shortfall', () => {
+    const p = targetProgress(summary({ revenue: 300000, projectedRevenue: 400000, projectedDays: 4 }));
+    expect(p.shortfall).toBeLessThan(0);
+  });
+
   it('states the goal in earnings and the gap per remaining day', () => {
     const p = targetProgress(summary({ revenue: 100000, projectedRevenue: 283333, projectedDays: 20 }));
     expect(p.payWanted).toBe(93000);
