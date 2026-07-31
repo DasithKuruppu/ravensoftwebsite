@@ -10,7 +10,7 @@ import {
   isDriverPermitted,
 } from '../../shared/costs.mjs';
 import { amount } from '../format.js';
-import { currentMonth } from '../format.js';
+import { currentMonth, todayLocal } from '../format.js';
 
 /**
  * Running-cost lines. Owner-only, enforced by the API.
@@ -32,6 +32,25 @@ export default function CostEditor() {
   const patch = (i, key, value) =>
     setRows((prev) => prev.map((r, n) => (n === i ? { ...r, [key]: value } : r)));
 
+  /**
+   * Switching to One-off fills the date if it is empty.
+   *
+   * A one-off is dated BY its date — `monthlyAmount` returns nothing for a
+   * one-off with none, so the line is stored, can be ticked, and then quietly
+   * belongs to no month at all: invisible in the cost card, in profit and in the
+   * driver's cash. The field is easy to miss on a row that began life as a
+   * monthly cost, so switching the frequency supplies today rather than leaving
+   * a shape that cannot work.
+   */
+  const setFrequency = (i, frequency) =>
+    setRows((prev) =>
+      prev.map((r, n) =>
+        n === i
+          ? { ...r, frequency, date: frequency === 'once' && !r.date ? todayLocal() : r.date }
+          : r,
+      ),
+    );
+
   async function save() {
     setBusy(true);
     setError('');
@@ -43,6 +62,10 @@ export default function CostEditor() {
           amount: Number(r.amount) || 0,
           termMonths: r.termMonths ? Number(r.termMonths) : null,
           driverVisible: isDriverVisible(r),
+          // Only a dated one-off can come out of the driver's cash; the flag is
+          // meaningless on a recurring line and would otherwise survive a change
+          // of frequency.
+          paidByDriverCash: r.paidByDriverCash === true,
         })),
       );
       setRows(res.costs);
@@ -90,7 +113,7 @@ export default function CostEditor() {
           it, where the header row supplies them instead. */}
       <div className="space-y-3 lg:space-y-0">
         <div className={`hidden lg:grid gap-2 border-b border-ink-700 pb-1 ${COLS}`}>
-          {['Cost', 'Category', 'How often', 'Amount', 'Starts / on', 'Months', 'Driver sees', 'Per month', ''].map(
+          {['Cost', 'Category', 'How often', 'Amount', 'Starts / on', 'Months', 'Driver sees', 'Driver paid cash', 'Per month', ''].map(
             (h, n) => (
               <span key={n} className="text-xs text-slate-400 font-medium">
                 {h}
@@ -129,7 +152,7 @@ export default function CostEditor() {
               <select
                 className="w-full text-sm py-1 px-1"
                 value={r.frequency || 'monthly'}
-                onChange={(e) => patch(i, 'frequency', e.target.value)}
+                onChange={(e) => setFrequency(i, e.target.value)}
               >
                 {COST_FREQUENCIES.map((f) => (
                   <option key={f.key} value={f.key}>{f.label}</option>
@@ -157,6 +180,14 @@ export default function CostEditor() {
                     : 'When this cost started — a term is counted from here'
                 }
               />
+              {/* Belt and braces. The auto-fill above stops this arising from the
+                  frequency picker, but a date can still be cleared by hand, and a
+                  dateless one-off counts in no month anywhere in the app. Said in
+                  amber on the row rather than left to be discovered as a missing
+                  figure three cards away. */}
+              {r.frequency === 'once' && !r.date && (
+                <div className="text-[11px] text-warn mt-0.5">needs a date, or it counts nowhere</div>
+              )}
             </Field>
 
             {/* Only recurring costs can have a term. A lease of 60 here, with a
@@ -204,6 +235,25 @@ export default function CostEditor() {
               />
             </Field>
 
+            {/* Whose pocket it left. A one-off the driver paid for out of the
+                cash he carries is money he can no longer hand over, so it comes
+                off his balance the way a handover does — the cash card shows it
+                as a subtraction. Only one-offs offer it: nobody hands the driver
+                cash to pay the annual insurance. */}
+            {/* A plain checkbox on every line, off unless somebody ticks it.
+                It works on any frequency: a tick is honoured at whatever the
+                cost contributes to the month, so the box can never be ticked and
+                silently do nothing. */}
+            <Field label="Driver paid cash">
+              <input
+                type="checkbox"
+                checked={r.paidByDriverCash === true}
+                onChange={(e) => patch(i, 'paidByDriverCash', e.target.checked)}
+                className="w-4 h-4 accent-warn"
+                title="Paid by the driver out of the cash he is carrying"
+              />
+            </Field>
+
             <Field label="Per month">
               <span className="num text-sm text-slate-200">
                 {amount(preview.items.find((x) => x.id === r.id)?.monthly ?? 0)}
@@ -234,6 +284,32 @@ export default function CostEditor() {
         >
           Add cost
         </button>
+        {/* The one-off the driver paid for out of his cash, in one click.
+            Building it from "Add cost" meant changing the frequency to One-off
+            and setting a date BEFORE the cash box would enable — an ordering
+            nothing on the screen tells you about, so the box read as broken. */}
+        <button
+          className="btn"
+          onClick={() =>
+            setRows([
+              ...rows,
+              {
+                id: `cost-${Date.now()}`,
+                label: '',
+                category: 'other',
+                frequency: 'once',
+                amount: 0,
+                date: todayLocal(),
+                termMonths: null,
+                // Off by default, like every other new line. The button's job is
+                // the shape — a one-off, dated today — not the tick.
+                paidByDriverCash: false,
+              },
+            ])
+          }
+        >
+          Add driver expense
+        </button>
         <button className="btn" onClick={() => setRows(DEFAULT_COSTS)} disabled={busy}>
           Reset to defaults
         </button>
@@ -245,7 +321,7 @@ export default function CostEditor() {
 
 /** Column geometry, shared by the header row and every cost row. */
 const COLS =
-  'lg:grid-cols-[minmax(7rem,2fr)_1.2fr_1.2fr_minmax(4.5rem,1fr)_1.1fr_minmax(4rem,.8fr)_.7fr_minmax(4.5rem,1fr)_auto]';
+  'lg:grid-cols-[minmax(7rem,2fr)_1.2fr_1.2fr_minmax(4.5rem,1fr)_1.1fr_minmax(4rem,.8fr)_.7fr_.7fr_minmax(4.5rem,1fr)_auto]';
 
 /**
  * One field. Its label shows only where the header row is not there to supply

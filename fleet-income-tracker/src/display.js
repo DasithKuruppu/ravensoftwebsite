@@ -15,6 +15,7 @@
  */
 import { calculatePay } from '../shared/commission.mjs';
 import { todayLocal } from './format.js';
+import { getLocale } from './i18n/i18n.js';
 
 /**
  * The canonical rounded figure for any threshold we SHOW.
@@ -151,11 +152,70 @@ export function nextZone(summary) {
   return null;
 }
 
+/**
+ * The driver's name in the language being read.
+ *
+ * The Sinhala spelling is optional: a fleet that never sets one keeps the Latin
+ * name in both languages, which is right — a name is not a string to be
+ * translated, and guessing a transliteration would get somebody's name wrong.
+ * Only what the owner typed is ever shown.
+ */
+export function driverNameIn(summary, locale = getLocale()) {
+  const si = String(summary?.driverNameSi || '').trim();
+  if (locale === 'si' && si) return si;
+  return String(summary?.driverName || '').trim();
+}
+
 /** Trips per working day, beside every revenue-per-day figure. */
 export function tripsPerDay(summary) {
-  const days = summary?.earningDays || 0;
-  if (!days || !summary.trips) return null;
-  return Math.round((summary.trips / days) * 10) / 10;
+  // The same days the daily average is struck over: complete shifts, days off
+  // out. It used to divide by `earningDays`, which counts today — so the tile
+  // read "18,360 over 14 days · 15.3 trips a day" with the money averaged over
+  // 13 days and the trips over 14, and neither figure was wrong on its own.
+  const days = averageDays(summary);
+  if (!days) return null;
+  const trips = completedTrips(summary);
+  return trips ? Math.round((trips / days) * 10) / 10 : null;
+}
+
+/**
+ * What the days off still booked ahead will cost in revenue.
+ *
+ * Days already taken are sunk and are already out of the average; these are the
+ * ones he can still change his mind about, so they are the ones worth pricing.
+ * Priced at his own daily average rather than a threshold rate — the question is
+ * what HE earns on a day he drives, not what the plan wishes he did.
+ *
+ * Null when there is nothing booked or no average to price it at: a confident
+ * "−0" would be a claim, and pricing time off against an average of zero would
+ * say a day off is free.
+ */
+export function offDaysCost(summary) {
+  const ahead = summary?.offDaysAhead || 0;
+  const perDay = summary?.dailyAverage || 0;
+  if (ahead <= 0 || perDay <= 0) return null;
+  return Math.round(ahead * perDay);
+}
+
+/**
+ * The denominator behind `dailyAverage` — complete days that earned, days off
+ * excluded. The server strikes the average over exactly these, so the card can
+ * say so; `earningDays` is the wider count that includes a shift in progress.
+ */
+export function averageDays(summary) {
+  const pace = summary?.paceDays;
+  return Number.isFinite(pace) && pace > 0 ? pace : summary?.earningDays || 0;
+}
+
+/** The month's trips less today's, to match the days they are divided by. */
+function completedTrips(summary) {
+  const trips = summary?.trips || 0;
+  if (!trips) return 0;
+  // Only subtract when today is actually inside the denominator's blind spot:
+  // with no `paceDays` we fall back to `earningDays`, which does count today.
+  if (!Number.isFinite(summary?.paceDays)) return trips;
+  const todayTrips = summary?.today?.offDay ? 0 : summary?.today?.trips || 0;
+  return Math.max(0, trips - todayTrips);
 }
 
 /** The plan as the driver's own view of it: prorated edges, real rates. */
@@ -215,27 +275,52 @@ export function revenueForPay(pay, summary) {
 }
 
 /**
- * This month's share of the monthly take-home goal.
+ * This month's share of the monthly goal, in REVENUE.
+ *
+ * The goal the driver sets is revenue, and his pay is derived from it. It was
+ * the other way round — he named a take-home and the screen solved backwards for
+ * the revenue it needed — which meant the one number he chose was not the one
+ * the hero divided, and the two could not be checked against each other: a
+ * 93,000 goal and a 5,500-a-day ask have no visible arithmetic between them.
+ * Revenue is also what he can actually see himself earning during a shift.
  *
  * Payouts land at the end of each month, so the goal is monthly. In the month he
  * starts it is scaled by the same factor the plan is: twelve days of a
  * thirty-one-day month can only be asked for twelve days of earnings, and
  * scaling both together is what keeps the per-day figure identical between a
  * partial month and a full one.
+ *
+ * `payTarget` is the old take-home field. A record saved before this change has
+ * only that, and reinterpreting it as revenue would quietly cut a driver's goal
+ * to a quarter — so it is converted through the plan instead, which lands him on
+ * the revenue that pays what he originally asked for.
  */
-export function payTargetForMonth(summary) {
-  const stated = Number(summary?.payTarget);
-  if (!Number.isFinite(stated) || stated <= 0) return null;
-  const factor = Number.isFinite(summary.prorationFactor) ? summary.prorationFactor : 1;
-  return Math.round(stated * factor);
+export function revenueTargetForMonth(summary) {
+  const factor = Number.isFinite(summary?.prorationFactor) ? summary.prorationFactor : 1;
+  const stated = Number(summary?.revenueTarget);
+  if (Number.isFinite(stated) && stated > 0) return Math.round(stated * factor);
+
+  const legacy = Number(summary?.payTarget);
+  if (!Number.isFinite(legacy) || legacy <= 0) return null;
+  const converted = revenueForPay(Math.round(legacy * factor), summary);
+  return converted === null ? null : Math.round(converted);
 }
 
-/** The revenue this month's take-home goal needs, as a clean printable figure. */
+/** This month's revenue goal, as a clean printable figure. */
 export function targetForMonth(summary) {
-  const pay = payTargetForMonth(summary);
-  if (pay === null) return null;
-  const revenue = revenueForPay(pay, summary);
+  const revenue = revenueTargetForMonth(summary);
   return revenue === null ? null : displayThreshold(revenue, 'up');
+}
+
+/**
+ * The take-home that goal earns him — derived, not stated.
+ *
+ * Read off the printable revenue goal rather than the raw one, so the pay quoted
+ * is the pay for the revenue figure he is actually shown.
+ */
+export function payAtTargetForMonth(summary) {
+  const revenue = targetForMonth(summary);
+  return revenue === null ? null : Math.round(payAt(revenue, summary));
 }
 
 /**
@@ -354,6 +439,11 @@ export function paces(summary) {
  *
  * "Banked" reads off revenue EARNED, never the projection: a forecast that says he
  * will get there is not the same as getting there.
+ *
+ * Returns a translation KEY for its line of copy rather than the line itself, so
+ * this stays a pure function of the summary with no locale in it — the component
+ * holds the `t()`. Assembling the sentence here would also fix its word order in
+ * English, and Sinhala puts the ask after the reason.
  */
 export function dailyTarget(summary) {
   if (!summary) return null;
@@ -366,12 +456,23 @@ export function dailyTarget(summary) {
       kind: 'goal',
       amount: p.goalPace,
       goal: p.goalRevenue,
+      // What the goal pays, so the line under the ask carries both halves of the
+      // bargain: the revenue to drive, and the money he keeps for driving it. The
+      // goal is revenue and revenue is not his — without this the biggest figure
+      // on the screen is one he never receives.
+      pay: payAtTargetForMonth(summary),
       daysLeft: p.daysLeft,
-      context: 'every day, to reach your goal this month',
+      contextKey: 'hero.context.goal',
       // The tier line, when it asks for more than the goal does — driving only the
       // goal's pace would then miss the threshold, which is worth one quiet line.
       secondary:
-        p.tierPace > p.goalPace ? { amount: p.tierPace, text: 'is what your 50% zone needs' } : null,
+        p.tierPace > p.goalPace
+          ? {
+              amount: p.tierPace,
+              textKey: 'hero.secondary.tier',
+              pct: Math.round((driverPlan(summary).topRate || 0) * 100),
+            }
+          : null,
       celebratory: false,
     };
   }
@@ -381,11 +482,17 @@ export function dailyTarget(summary) {
       kind: 'tier',
       amount: p.tierPace,
       goal: p.tier3,
+      // Same for the fallback target: the top threshold is a revenue line, and
+      // what it pays is the reason to care about it.
+      pay: Math.round(payAt(p.tier3, summary)),
+      // The rate the zone actually pays, so the sentence naming it cannot drift
+      // from the plan the way a literal "50%" in two dictionaries could.
+      pct: Math.round((driverPlan(summary).topRate || 0) * 100),
       daysLeft: p.daysLeft,
-      context:
+      contextKey:
         (summary.projectedRevenue || 0) >= p.tier3
-          ? 'every day, to stay in your 50% zone'
-          : 'every day, to reach your 50% zone',
+          ? 'hero.context.tierStay'
+          : 'hero.context.tierReach',
       secondary: null,
       celebratory: false,
     };
@@ -395,8 +502,9 @@ export function dailyTarget(summary) {
     kind: 'beyond',
     amount: tidyDaily(summary.dailyAverage || 0),
     goal: null,
+    pay: null,
     daysLeft: p.daysLeft,
-    context: 'your pace — and you keep half of every rupee now',
+    contextKey: 'hero.context.beyond',
     secondary: null,
     celebratory: true,
   };
@@ -407,8 +515,9 @@ function monthOver(summary) {
     kind: 'done',
     amount: Math.round(summary.driverPay || 0),
     goal: null,
+    pay: null,
     daysLeft: 0,
-    context: 'Every day is in — this is your pay for the month',
+    contextKey: 'hero.context.done',
     secondary: null,
     celebratory: (summary.driverPay || 0) > 0,
   };
@@ -428,16 +537,19 @@ function monthOver(summary) {
  * act on — by driving harder, or by moving the goal.
  */
 export function targetProgress(summary) {
-  const payWanted = payTargetForMonth(summary);
   const goalRevenue = targetForMonth(summary);
+  const payWanted = payAtTargetForMonth(summary);
   if (payWanted === null || goalRevenue === null) return null;
 
   const p = paces(summary);
   const payAtPace = Math.round(payAt(summary.projectedRevenue || 0, summary));
 
   return {
+    // The take-home the goal earns. Derived now rather than stated, so it is
+    // what the goal PAYS rather than what was asked for.
     payWanted,
-    payStated: Number(summary.payTarget) || null,
+    // The revenue figure he typed, unprorated — what the editor reopens on.
+    revenueStated: Number(summary.revenueTarget) || null,
     prorated: (summary.prorationFactor ?? 1) < 1,
     goalRevenue,
     daysLeft: p.daysLeft,
@@ -450,35 +562,45 @@ export function targetProgress(summary) {
     // The comparison as its own figure, in take-home, so nobody has to subtract
     // two numbers that sit rows apart.
     shortfall: Math.round(payWanted - payAtPace),
+    // What closing the gap costs ON TOP of the pace he is already holding.
+    //
+    // The absolute ask does not say whether it is a small push or a different
+    // job: "5,500 a day" against an average of 4,300 is one more fare, and
+    // against 2,000 it is not going to happen. Measured off the same daily
+    // average the stat row shows, so the two figures can be read against each
+    // other. Zero when the pace already covers it — there is no lift to name.
+    liftPerDay: Math.max(0, Math.round((p.goalPace || 0) - (summary.dailyAverage || 0))),
   };
 }
 
 /**
- * Suggested goals for next month, anchored on what he actually made last month.
+ * Suggested goals for next month, anchored on what he actually drove last month.
  *
  * Anchoring matters more than the rungs. A picker that opens on a round number
- * somebody typed invites a guess; one that opens on "you made 57,000 last month"
- * turns the choice into a decision about how much harder to push. Rungs sit at
- * the same, a bit more, a stretch and a reach, and none of them can fall below
- * the base he is paid whatever he drives — a goal under the guaranteed floor is
- * not a goal.
+ * somebody typed invites a guess; one that opens on "you drove 331,000 last
+ * month" turns the choice into a decision about how much harder to push.
+ *
+ * Anchored on REVENUE, matching what the goal now is. None of the rungs may fall
+ * below the band start: under that line every rupee pays the same base whatever
+ * he drives, so a goal there is not a goal — it asks for nothing the plan
+ * rewards.
  */
 export const GOAL_RUNGS = [
-  { multiple: 1, label: 'Same again' },
-  { multiple: 1.15, label: 'A bit more' },
-  { multiple: 1.3, label: 'A stretch' },
-  { multiple: 1.5, label: 'A reach' },
+  { multiple: 1, labelKey: 'rung.same' },
+  { multiple: 1.15, labelKey: 'rung.more' },
+  { multiple: 1.3, labelKey: 'rung.stretch' },
+  { multiple: 1.5, labelKey: 'rung.reach' },
 ];
 
 export function goalRungs(summary) {
-  const anchor = Math.round(summary?.lastMonth?.driverPay || 0);
-  const floor = Math.round(displayBase(driverPlan(summary).base) || 0);
+  const anchor = Math.round(summary?.lastMonth?.revenue || 0);
+  const floor = displayThreshold(driverPlan(summary).bandStart || 0);
   if (anchor <= 0) return [];
 
   const seen = new Set();
-  return GOAL_RUNGS.map(({ multiple, label }) => {
+  return GOAL_RUNGS.map(({ multiple, labelKey }) => {
     const value = Math.max(floor, roundTo(anchor * multiple, 5000));
-    return { multiple, label, value };
+    return { multiple, labelKey, value };
   }).filter((rung) => {
     if (seen.has(rung.value)) return false;
     seen.add(rung.value);
@@ -661,6 +783,8 @@ export function chargingLens(summary) {
     logged: charging?.logged ?? null,
     modelled: charging?.modelled ?? null,
     loggedDays: charging?.loggedDays ?? 0,
+    // Fast against home, across the month's logged sessions.
+    byType: charging?.byType ?? null,
     modelledDays: charging?.modelledDays ?? 0,
     reference: CHARGING_REFERENCE_PER_KM,
     // What one rupee per km is worth across this month's distance.
@@ -813,6 +937,11 @@ export function cashPocket(summary, hero) {
     cashKnown: Boolean(summary.cashKnown),
     // The share of the takings that arrived as cash, as a percentage of them.
     cashPctOfTakings: total > 0 ? Math.round((collected / total) * 100) : 0,
+    // The float the owner handed him to start the month, and what he has spent
+    // out of the cash since. Both move the balance; neither is a fare.
+    startingFloat: Math.round(cash.startingFloat || 0),
+    cashExpenses: Math.round(cash.cashExpenses || 0),
+    cashExpenseLines: cash.cashExpenseLines || [],
     // What has already gone back, and what is still in his pocket.
     handedOver: Math.round(cash.confirmed),
     holding: Math.round(cash.holding),
@@ -835,10 +964,16 @@ export function cashPocket(summary, hero) {
     settlement: Math.abs(Math.round(cash.settlement)),
     owedToOwner: cash.settlement >= 0,
     // What is still to move, once the cash already handed over and confirmed is
-    // taken off. The month total answers "how big is this settlement"; this
-    // answers "how much have I still got to hand over", and a driver who has
-    // already paid 18,000 of it should not read the gross figure as outstanding.
-    leftToSettle: Math.round(cash.settlement - cash.confirmed),
+    // taken off. The month total answers "how much cash will I be carrying";
+    // this answers "how much have I still got to give back", and a driver who
+    // has already paid 18,000 of it should not read the gross figure as
+    // outstanding.
+    //
+    // Measured against the month's cash, not the settlement: he hands over every
+    // rupee he collects. What he is owed is paid to him separately, and netting
+    // the two here made the row understate the money he is holding for somebody
+    // else.
+    leftToHandOver: Math.round(cash.projectedCash - cash.confirmed),
     projectedCash: Math.round(cash.projectedCash),
     ledger: cash.handovers || [],
   };

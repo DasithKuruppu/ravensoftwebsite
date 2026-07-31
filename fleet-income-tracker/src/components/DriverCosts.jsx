@@ -1,5 +1,6 @@
 import { money, amount, rate as rateOf, count, dayLabel } from '../format.js';
 import { uberCut, farePer1000, chargingLens, chargingWeek, chargingHeadline } from '../display.js';
+import { useT } from '../i18n/index.jsx';
 
 /**
  * What this month's driving cost — the driver's half of the cost picture.
@@ -25,6 +26,7 @@ import { uberCut, farePer1000, chargingLens, chargingWeek, chargingHeadline } fr
  * a pay term, and pay terms live in the plan.
  */
 export default function DriverCosts({ summary }) {
+  const { t, tx } = useT();
   const charging = chargingLens(summary);
   const week = chargingWeek(summary);
   const headline = chargingHeadline(summary);
@@ -36,12 +38,12 @@ export default function DriverCosts({ summary }) {
   return (
     <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <h2 className="label">What this month's driving cost</h2>
+        <h2 className="label">{t('costs.heading')}</h2>
         {charging && (
           <span className="text-xs text-slate-400 num">
-            {amount(charging.km)} km
+            {amount(charging.km)} {t('unit.km')}
             {summary.directCosts?.gpsCovers > 0 && (
-              <span className="text-slate-400"> · from the tracker</span>
+              <span className="text-slate-400">{t('costs.fromTracker')}</span>
             )}
           </span>
         )}
@@ -55,9 +57,12 @@ export default function DriverCosts({ summary }) {
                 by what they cost would punish the shifts worth having. */}
             {charging.perKm !== null && (
               <Row
-                label="This month, per km"
-                hint={`over ${count(charging.matchedDays)} day${charging.matchedDays === 1 ? '' : 's'} with cost and distance${charging.estimated ? ' · part estimated' : ''}`}
-                value={`${rateOf(charging.perKm)}/km`}
+                label={t('costs.perKmMonth')}
+                hint={t('costs.perKmMonthHint', {
+                  count: charging.matchedDays,
+                  estimated: charging.estimated ? t('costs.partEstimated') : '',
+                })}
+                value={`${rateOf(charging.perKm)}${t('unit.perKm')}`}
                 tone="text-warn"
               />
             )}
@@ -65,22 +70,49 @@ export default function DriverCosts({ summary }) {
                 from the same helper. */}
             {headline && headline.basis === '7d' && (
               <Row
-                label="Last 7 days, per km"
-                hint={`${count(headline.matchedDays)} day${headline.matchedDays === 1 ? '' : 's'} · the fair one to judge on${headline.estimated ? ' · part estimated' : ''}`}
-                value={`${rateOf(headline.perKm)}/km`}
+                label={t('costs.perKm7d')}
+                hint={t('costs.perKm7dHint', {
+                  count: headline.matchedDays,
+                  estimated: headline.estimated ? t('costs.partEstimated') : '',
+                })}
+                value={`${rateOf(headline.perKm)}${t('unit.perKm')}`}
                 tone="text-warn"
               />
             )}
             <Row
-              label="Charging this month"
+              label={t('costs.chargingMonth')}
               hint={
                 charging.modelledDays > 0
-                  ? `${count(charging.loggedDays)} logged, ${count(charging.modelledDays)} estimated`
-                  : `${count(charging.loggedDays)} day${charging.loggedDays === 1 ? '' : 's'} logged`
+                  ? t('costs.loggedAndEstimated', {
+                      logged: count(charging.loggedDays),
+                      modelled: count(charging.modelledDays),
+                    })
+                  : t('costs.loggedDays', { count: charging.loggedDays })
               }
               value={money(charging.total)}
               tone="text-slate-100"
             />
+            {/* Fast against home, indented under the month's total the way the
+                cash card itemises its deductions. This is the split the driver
+                can actually act on: home is roughly a third of the price
+                off-peak, so a month that is mostly fast is a month with money
+                left on the table. Absent until a session says which it was. */}
+            {(charging.byType?.fast > 0 || charging.byType?.home > 0) && (
+              <ul className="mt-1 ml-3 pl-2 border-l border-ink-700 space-y-0.5">
+                {['fast', 'home', 'unknown'].map((kind) =>
+                  charging.byType?.[kind] > 0 ? (
+                    <li key={kind} className="flex items-baseline justify-between gap-3">
+                      <span className="text-xs text-slate-400 min-w-0 truncate">
+                        {t(`costs.charging.${kind}`)}
+                      </span>
+                      <span className="num text-xs text-slate-400 shrink-0">
+                        {money(charging.byType[kind])}
+                      </span>
+                    </li>
+                  ) : null,
+                )}
+              </ul>
+            )}
           </>
         )}
         {cut.lines.length > 0 && (
@@ -92,32 +124,35 @@ export default function DriverCosts({ summary }) {
               <Row
                 key={line.label}
                 label={line.label}
-                hint={line.kind === 'refund' ? 'refunded to the fleet' : "Uber's charge"}
+                hint={t(line.kind === 'refund' ? 'costs.refundedToFleet' : 'costs.ubersCharge')}
                 value={money(line.amount)}
                 tone={line.kind === 'refund' ? 'text-slate-100' : 'text-warn'}
               />
             ))}
             <div className="flex items-baseline justify-between gap-4 border-t border-ink-700 pt-2 mt-2">
-              <dt className="text-sm font-medium text-slate-200">Uber's cut, net</dt>
+              <dt className="text-sm font-medium text-slate-200">{t('costs.ubersCutNet')}</dt>
               <dd className="num text-warn shrink-0">{money(cut.charges - cut.refunded)}</dd>
             </div>
           </>
         )}
         {cut.lines.length === 0 && cut.charges > 0 && (
           <Row
-            label="Uber's cut"
-            hint="Drive Pass subscription and fees"
+            label={t('costs.ubersCut')}
+            hint={t('costs.ubersCutHint')}
             value={money(cut.charges)}
             tone="text-warn"
           />
         )}
         {cut.commission > 0 && (
           <Row
-            label={cut.estimated ? "Uber's share of fares (estimated)" : "Uber's share of fares"}
+            label={t(cut.estimated ? 'costs.ubersShareEstimated' : 'costs.ubersShare')}
             hint={
               cut.estimated
-                ? `assumes ${Math.round(cut.rate * 100)}% — the export does not state it`
-                : `${Math.round(cut.rate * 100)}% of ${amount(cut.gross)} in fares`
+                ? t('costs.ubersShareHintEstimated', { pct: Math.round(cut.rate * 100) })
+                : t('costs.ubersShareHint', {
+                    pct: Math.round(cut.rate * 100),
+                    gross: amount(cut.gross),
+                  })
             }
             value={money(cut.commission)}
             tone="text-warn"
@@ -130,16 +165,16 @@ export default function DriverCosts({ summary }) {
       {split && (
         <div className="mt-4 pt-3 border-t border-ink-700">
           <div className="label mb-2">
-            Every LKR 1,000 of fares{split.estimated ? ' (estimated)' : ''}
+            {t(split.estimated ? 'costs.per1000Estimated' : 'costs.per1000')}
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <Share label="Uber takes" value={split.uber} tone="text-warn" />
-            <Share label="Charging takes" value={split.charging} tone="text-warn" />
-            <Share label="Left to split" value={split.pool} tone="text-slate-100" />
+            <Share label={t('costs.uberTakes')} value={split.uber} tone="text-warn" />
+            <Share label={t('costs.chargingTakes')} value={split.charging} tone="text-warn" />
+            <Share label={t('costs.leftToSplit')} value={split.pool} tone="text-slate-100" />
           </div>
-          <p className="text-[11px] text-slate-400 mt-2">
-            The rest pays your plan and runs the car.
-            {split.estimated && ' Uber does not state its share of a fare, so that part is an estimate.'}
+          <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">
+            {t('costs.restNote')}
+            {split.estimated && t('costs.estimateNote')}
           </p>
         </div>
       )}
@@ -149,7 +184,7 @@ export default function DriverCosts({ summary }) {
           passing a budget off as a receipt. */}
       {week && week.days.length > 0 && (
         <div className="mt-4 pt-3 border-t border-ink-700">
-          <div className="label mb-2">Last 7 days</div>
+          <div className="label mb-2">{t('costs.last7')}</div>
           <dl className="space-y-1.5">
             {week.days.map((day) => (
               <div key={day.date} className="flex items-baseline justify-between gap-3">
@@ -157,20 +192,17 @@ export default function DriverCosts({ summary }) {
                   {dayLabel(day.date)}
                   <span className="block text-xs text-slate-400 num">
                     {money(day.cost)}
-                    {day.km > 0 ? ` · ${amount(day.km)} km` : ' · no distance'}
-                    {day.estimated ? ' · estimated' : ''}
+                    {day.km > 0 ? ` · ${amount(day.km)} ${t('unit.km')}` : t('costs.noDistance')}
+                    {day.estimated ? t('costs.estimated') : ''}
                   </span>
                 </dt>
                 <dd className={`num shrink-0 ${day.estimated ? 'text-slate-400' : 'text-warn'}`}>
-                  {day.perKm === null ? '—' : `${rateOf(day.perKm)}/km`}
+                  {day.perKm === null ? '—' : `${rateOf(day.perKm)}${t('unit.perKm')}`}
                 </dd>
               </div>
             ))}
           </dl>
-          <p className="text-[11px] text-slate-400 mt-2">
-            A day you charged for tomorrow's driving reads expensive, and the next reads cheap. That
-            is why the seven-day rate above is the one to go by.
-          </p>
+          <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">{t('costs.weekNote')}</p>
         </div>
       )}
 
@@ -178,28 +210,26 @@ export default function DriverCosts({ summary }) {
           the revenue on this page is what arrived after them. */}
       {cut.taxes.length > 0 && (
         <div className="mt-4 pt-3 border-t border-ink-700">
-          <div className="label mb-2">Already taken out of your fares</div>
+          <div className="label mb-2">{t('costs.taxesHeading')}</div>
           <dl className="space-y-1.5">
             {cut.taxes.map((tax) => (
               <Row key={tax.label} label={tax.label} value={money(tax.amount)} tone="text-slate-100" />
             ))}
           </dl>
-          <p className="text-[11px] text-slate-400 mt-2">
-            Uber deducts these before it pays, so what you see as revenue is already after them.
-          </p>
+          <p className="text-[11px] text-slate-400 mt-2 leading-relaxed">{t('costs.taxesNote')}</p>
         </div>
       )}
 
       {/* The one line about what he can change. A fact about his own month, with
           no promise attached to it. */}
       {charging && charging.perKm !== null && (
-        <p className="text-sm text-slate-300 mt-4 pt-3 border-t border-ink-700">
-          Charging is the cost you choose: you are paying{' '}
-          <span className="num text-warn">{rateOf(charging.perKm)}</span> a km against a{' '}
-          <span className="num">{charging.reference}</span> a km reference. Every{' '}
-          <span className="num">1</span> a km saved is about{' '}
-          <span className="num">{count(charging.perRupeePerKm)}</span> a month off what the car
-          costs to run.
+        <p className="text-sm text-slate-300 mt-4 pt-3 border-t border-ink-700 leading-relaxed">
+          {tx('costs.chooseNote', {
+            rate: <span className="num text-warn">{rateOf(charging.perKm)}</span>,
+            reference: <span className="num">{charging.reference}</span>,
+            one: <span className="num">1</span>,
+            saving: <span className="num">{count(charging.perRupeePerKm)}</span>,
+          })}
         </p>
       )}
     </div>
@@ -234,6 +264,7 @@ function Row({ label, hint, value, tone = 'text-slate-100' }) {
  * exists and is worth a tap, in one line and without competing for the glance.
  */
 export function DriverCostsTeaser({ summary, onOpen }) {
+  const { t, tx } = useT();
   // The same helper the card's headline row reads. Recomputing a rate here from
   // the month total and the month distance is how the teaser and the card came to
   // quote different figures for the same thing.
@@ -244,16 +275,16 @@ export function DriverCostsTeaser({ summary, onOpen }) {
       onClick={onOpen}
       className="w-full text-left rounded-lg border border-ink-700 bg-ink-900 px-3.5 py-2.5"
     >
-      <span className="text-sm text-slate-300">
-        Charging is running at <span className="num text-warn">{rateOf(headline.perKm)}</span> a km.{' '}
-        <span className="text-slate-100 underline underline-offset-2">
-          See what your driving costs
-        </span>
+      <span className="text-sm text-slate-300 leading-relaxed">
+        {tx('teaser.rate', {
+          rate: <span className="num text-warn">{rateOf(headline.perKm)}</span>,
+        })}
+        <span className="text-slate-100 underline underline-offset-2">{t('teaser.cta')}</span>
       </span>
       <span className="block text-[11px] text-slate-400 num mt-0.5">
-        over {count(headline.matchedDays)} day{headline.matchedDays === 1 ? '' : 's'}
-        {headline.basis === '7d' ? ' (last 7 days)' : ' this month'}
-        {headline.estimated ? ' · part estimated' : ''}
+        {t('teaser.days', { count: headline.matchedDays })}
+        {t(headline.basis === '7d' ? 'teaser.last7' : 'teaser.thisMonth')}
+        {headline.estimated ? t('costs.partEstimated') : ''}
       </span>
     </button>
   );

@@ -85,6 +85,15 @@ export async function writeGpsKm(date, gpsKm) {
     trips: existing?.trips ?? null,
     uberKm: existing?.uberKm ?? null,
     gpsKm,
+    cashCollected: existing?.cashCollected ?? null,
+    // `putEntry` replaces the whole item, so every column this job does not
+    // describe has to be carried or it is deleted. A nightly GPS sync silently
+    // clearing a booked day off is the same bug the import had.
+    offDay: existing?.offDay === true,
+    chargeSessions: existing?.chargeSessions ?? [],
+    uberFees: existing?.uberFees ?? null,
+    uberFeeLines: existing?.uberFeeLines ?? null,
+    uberTaxLines: existing?.uberTaxLines ?? null,
     // Preserve how the revenue arrived; only mark the row as api-sourced when
     // this job is what created it.
     source: existing?.source ?? 'api',
@@ -100,6 +109,12 @@ export async function writeRevenue(date, { revenue, trips, uberKm }) {
     trips: trips ?? existing?.trips ?? null,
     uberKm: uberKm ?? existing?.uberKm ?? null,
     gpsKm: existing?.gpsKm ?? null,
+    cashCollected: existing?.cashCollected ?? null,
+    offDay: existing?.offDay === true,
+    chargeSessions: existing?.chargeSessions ?? [],
+    uberFees: existing?.uberFees ?? null,
+    uberFeeLines: existing?.uberFeeLines ?? null,
+    uberTaxLines: existing?.uberTaxLines ?? null,
     source: 'api',
   });
 }

@@ -46,7 +46,7 @@ export default function RunningCosts({ summary }) {
                   {c.remaining !== null && c.remaining !== undefined && ` · ${c.remaining} left`}
                 </span>
               </dt>
-              <dd className="num text-slate-300">{amount(c.monthly)}</dd>
+              <dd className="num text-slate-300">{deduct(c.monthly)}</dd>
             </div>
           ))}
         </dl>
@@ -55,6 +55,14 @@ export default function RunningCosts({ summary }) {
       <dl className="mt-3 pt-3 border-t border-ink-800 space-y-1.5">
         {summary.uberFees && summary.uberFees.toDate !== 0 && (
           <>
+            {/* Uber's charges, kept together under their own heading.
+                They used to run straight on from the cost lines into the per-km
+                rates and the profit chain, so the subscription — the largest
+                single thing Uber takes — read as one more running cost beside the
+                lease and the insurance. It is a different kind of money: taken
+                off the fare before it reaches the fleet, and never charged to the
+                driver. Grouping says that without a sentence. */}
+            <div className="label pt-1">Uber charges</div>
             {/* Itemised: the subscription is most of it, and the rest is small
                 fees and reimbursements that a single net figure hides. */}
             {(summary.uberFees.lines || []).map((line) => (
@@ -62,14 +70,14 @@ export default function RunningCosts({ summary }) {
                 key={line.label}
                 label={line.label}
                 hint={line.kind === 'refund' ? 'refunded by Uber' : "Uber's charge"}
-                value={amount(line.amount)}
+                value={signed(line.amount)}
                 tone={line.amount < 0 ? 'text-warn' : 'text-slate-100'}
               />
             ))}
             <Row
               label={summary.uberFees.toDate < 0 ? 'Uber charges, net' : 'Uber refunds, net'}
               hint="never charged to the driver"
-              value={amount(summary.uberFees.toDate)}
+              value={signed(summary.uberFees.toDate)}
               tone={summary.uberFees.toDate < 0 ? 'text-warn' : 'text-slate-100'}
             />
             {(summary.uberFees.taxes || []).map((tax) => (
@@ -77,10 +85,14 @@ export default function RunningCosts({ summary }) {
                 key={tax.label}
                 label={tax.label}
                 hint="already deducted inside revenue"
-                value={amount(tax.amount)}
+                // Unsigned on purpose: these sit INSIDE `revenue` already, so a
+                // minus in a column of deductions would read as a second bite at
+                // the same rupees. A disclosure, not a movement.
+                value={amount(Math.abs(tax.amount))}
                 tone="text-slate-400"
               />
             ))}
+            <div className="border-t border-ink-800 pt-1" />
           </>
         )}
         {costs.chargingPerKm !== null && costs.chargingPerKm !== undefined && (
@@ -98,8 +110,10 @@ export default function RunningCosts({ summary }) {
             intermediate — revenue less driver pay — but it reads like income
             when it is really just the amount left to pay for the car with. */}
         <Row label="Revenue" value={amount(revenue)} />
-        <Row label={`less ${driverName || 'driver'} pay`} value={`− ${amount(driverPay)}`} tone="text-slate-400" />
-        <Row label="less running costs" value={`− ${amount(costs.total)}`} tone="text-warn" />
+        {/* "less X" in the label AND a minus on the figure said it twice. The
+            sign carries it now, the same way it does on every row above. */}
+        <Row label={`${driverName || 'Driver'} pay`} value={deduct(driverPay)} tone="text-slate-400" />
+        <Row label="Running costs" value={deduct(costs.total)} tone="text-warn" />
         <div className="flex items-baseline justify-between gap-4 border-t border-ink-800 pt-2 mt-2">
           <dt className="text-sm font-medium text-slate-300">
             {loss ? 'Shortfall this month' : 'Profit this month'}
@@ -126,6 +140,30 @@ export default function RunningCosts({ summary }) {
       )}
     </div>
   );
+}
+
+/**
+ * One sign convention for the whole ledger.
+ *
+ * It had three. Cost lines printed bare positives, Uber's lines carried whatever
+ * sign the export happened to give them, and only the last two rows spelled out
+ * a minus — so a 52,000 lease and a −2,400 subscription sat in one column meaning
+ * the same thing and looking like opposites.
+ *
+ * Now anything leaving reads `− x`, anything coming back reads `+ x`, and the
+ * magnitude is always unsigned so the arithmetic lives in the symbol rather than
+ * inside the number. Rates and revenue take no sign: they are not movements.
+ */
+function signed(value) {
+  const n = Number(value) || 0;
+  if (n === 0) return amount(0);
+  return `${n < 0 ? '−' : '+'} ${amount(Math.abs(n))}`;
+}
+
+/** A cost is a deduction however its magnitude happens to be stored. */
+function deduct(value) {
+  const n = Math.abs(Number(value) || 0);
+  return n === 0 ? amount(0) : `− ${amount(n)}`;
 }
 
 function Row({ label, hint, value, tone = 'text-slate-200' }) {

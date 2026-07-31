@@ -64,48 +64,60 @@ describe('PUT /settings/target', () => {
   it('lets the driver set his own goal', async () => {
     const res = await call('PUT', '/settings/target', {
       token: driverToken,
-      body: { payTarget: 120000 },
+      body: { revenueTarget: 420000 },
     });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ payTarget: 120000 });
+    expect(res.body).toEqual({ revenueTarget: 420000 });
 
     const summary = await call('GET', '/summary', { token: driverToken });
-    expect(summary.body.payTarget).toBe(120000);
+    expect(summary.body.revenueTarget).toBe(420000);
+  });
+
+  /**
+   * Writing a revenue goal has to retire the take-home one it replaced. The
+   * display layer converts a leftover `payTarget` when no revenue goal is set,
+   * so a stale one left in the record would outlive a goal he had cleared.
+   */
+  it('retires the take-home goal it replaced', async () => {
+    await call('PUT', '/settings/target', { token: driverToken, body: { revenueTarget: 420000 } });
+    const summary = await call('GET', '/summary', { token: driverToken });
+    expect(summary.body.payTarget).toBe(null);
   });
 
   it('lets the owner set it too', async () => {
     const res = await call('PUT', '/settings/target', {
       token: ownerToken,
-      body: { payTarget: 90000 },
+      body: { revenueTarget: 300000 },
     });
     expect(res.status).toBe(200);
-    expect(res.body.payTarget).toBe(90000);
+    expect(res.body.revenueTarget).toBe(300000);
   });
 
   it('clears the goal on an explicit null', async () => {
     const res = await call('PUT', '/settings/target', {
       token: driverToken,
-      body: { payTarget: null },
+      body: { revenueTarget: null },
     });
     expect(res.status).toBe(200);
-    expect(res.body.payTarget).toBe(null);
+    expect(res.body.revenueTarget).toBe(null);
   });
 
   it('refuses a value that is not a number', async () => {
     const res = await call('PUT', '/settings/target', {
       token: driverToken,
-      body: { payTarget: 'lots' },
+      body: { revenueTarget: 'lots' },
     });
     expect(res.status).toBe(400);
   });
 
   it('clamps a negative or absurd goal instead of storing it', async () => {
-    expect((await call('PUT', '/settings/target', { token: driverToken, body: { payTarget: -5000 } })).body.payTarget).toBe(0);
-    expect((await call('PUT', '/settings/target', { token: driverToken, body: { payTarget: 99_000_000 } })).body.payTarget).toBe(5_000_000);
+    expect((await call('PUT', '/settings/target', { token: driverToken, body: { revenueTarget: -5000 } })).body.revenueTarget).toBe(0);
+    expect((await call('PUT', '/settings/target', { token: driverToken, body: { revenueTarget: 99_000_000 } })).body.revenueTarget).toBe(5_000_000);
   });
 
   it('needs a token', async () => {
-    const res = await call('PUT', '/settings/target', { body: { payTarget: 1000 } });
+    const res = await call('PUT', '/settings/target', { body: { revenueTarget: 1000 } });
+
     expect(res.status).toBe(401);
   });
 
@@ -658,5 +670,300 @@ describe('the projection and a shift still in progress', () => {
     expect(res.body.projectedDays).toBe(
       daysInMonthOf(today.slice(0, 7)) - Number(today.slice(8, 10)) + 1,
     );
+  });
+
+  /**
+   * The month being viewed decides how many days are left in it.
+   *
+   * `projectedDays` used to be `daysInMonth - todayDay + 1` with no reference to
+   * the requested month, so it answered for the current month whatever month was
+   * asked about. Viewed from the 28th of July, August had four days in it — and
+   * the driver's screen, which divides his monthly goal by this number, told him
+   * to earn 91,000 a day to reach a 100,000 goal.
+   */
+  it('gives a future month all of its days, not the days left in this one', async () => {
+    const { todayInColombo, daysInMonthOf } = await import('./handler.mjs');
+    const next = nextMonthOf(todayInColombo().slice(0, 7));
+
+    const res = await call('GET', `/summary?month=${next}`, { token: driverToken });
+    expect(res.body.projectedDays).toBe(daysInMonthOf(next));
+    // And the whole month is ahead, so nothing has elapsed in it.
+    expect(res.body.elapsedDays).toBe(0);
+  });
+
+  it('leaves a finished month with no days left and no projection', async () => {
+    const { importRows, todayInColombo } = await import('./handler.mjs');
+    const previous = previousMonthOf(todayInColombo().slice(0, 7));
+    await importRows([{ date: `${previous}-05`, revenue: '9000', trips: '8' }]);
+
+    const res = await call('GET', `/summary?month=${previous}`, { token: driverToken });
+    expect(res.body.projectedDays).toBe(0);
+    // A month that is over is worth exactly what it earned — the projection used
+    // to credit it one more day at the pace it finished on.
+    expect(res.body.projectedRevenue).toBe(res.body.revenue);
+  });
+
+  it('counts a future month\'s off days by date, not by day number', async () => {
+    const { todayInColombo, daysInMonthOf } = await import('./handler.mjs');
+    const next = nextMonthOf(todayInColombo().slice(0, 7));
+
+    // The 3rd of next month is genuinely ahead of us, whatever today's date is.
+    // Compared as day numbers it looked past on any day after the 3rd.
+    await call('PUT', `/entries/${next}-03/off`, { token: driverToken, body: { off: true } });
+    const res = await call('GET', `/summary?month=${next}`, { token: driverToken });
+    expect(res.body.projectedDays).toBe(daysInMonthOf(next) - 1);
+  });
+});
+
+/** The month after `yyyy-mm`, rolling the year over. */
+function nextMonthOf(month) {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function previousMonthOf(month) {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * The same whole-item-replace trap as the import, reached from the owner's edit
+ * form and from the day-off toggle itself.
+ */
+describe('an entry edit and the other writers columns', () => {
+  it('keeps the day-off mark when the owner edits the figures', async () => {
+    await call('PUT', '/entries/2026-07-20/off', { token: driverToken, body: { off: true } });
+    await call('PUT', '/entries/2026-07-20', {
+      token: ownerToken,
+      body: { revenue: 12000, trips: 9 },
+    });
+    const res = await call('GET', '/entries?month=2026-07', { token: ownerToken });
+    const day = res.body.entries.find((e) => e.date === '2026-07-20');
+    expect(day.offDay).toBe(true);
+    expect(day.revenue).toBe(12000);
+  });
+
+  it('still lets the owner clear a mis-marked day explicitly', async () => {
+    await call('PUT', '/entries/2026-07-21/off', { token: driverToken, body: { off: true } });
+    await call('PUT', '/entries/2026-07-21', {
+      token: ownerToken,
+      body: { revenue: 5000, offDay: false },
+    });
+    const res = await call('GET', '/entries?month=2026-07', { token: ownerToken });
+    expect(res.body.entries.find((e) => e.date === '2026-07-21').offDay).toBe(false);
+  });
+
+  it('keeps the charging log when the owner edits the figures', async () => {
+    await call('PUT', '/entries/2026-07-22/charging', {
+      token: driverToken,
+      body: { sessions: [{ amount: 2400, station: 'Keells Kottawa', kwh: 32 }] },
+    });
+    await call('PUT', '/entries/2026-07-22', { token: ownerToken, body: { revenue: 8000 } });
+    const res = await call('GET', '/entries?month=2026-07', { token: ownerToken });
+    const day = res.body.entries.find((e) => e.date === '2026-07-22');
+    expect(day.chargeSessions).toHaveLength(1);
+    expect(day.revenue).toBe(8000);
+  });
+
+  it('keeps the charging log when the day is marked off', async () => {
+    await call('PUT', '/entries/2026-07-23/charging', {
+      token: driverToken,
+      body: { sessions: [{ amount: 1800 }] },
+    });
+    await call('PUT', '/entries/2026-07-23/off', { token: driverToken, body: { off: true } });
+    const res = await call('GET', '/entries?month=2026-07', { token: ownerToken });
+    const day = res.body.entries.find((e) => e.date === '2026-07-23');
+    expect(day.offDay).toBe(true);
+    expect(day.chargeSessions).toHaveLength(1);
+  });
+});
+
+/**
+ * The charging network's export lands through its own route, because it writes a
+ * different column: what he paid to plug in, never the takings.
+ */
+describe('POST /entries/charging/import', () => {
+  const post = (days, token = driverToken) =>
+    call('POST', '/entries/charging/import', { token, body: { days } });
+  const dayOf = async (date) => {
+    const res = await call('GET', '/entries?month=2026-07', { token: ownerToken });
+    return res.body.entries.find((e) => e.date === date);
+  };
+
+  it('writes the sessions onto their days', async () => {
+    const res = await post([
+      { date: '2026-07-11', sessions: [{ id: 'csv-232839', amount: 885, station: 'Keells', kwh: 5.9 }] },
+      { date: '2026-07-12', sessions: [{ id: 'csv-233597', amount: 886.5 }] },
+    ]);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ days: 2, sessions: 2 });
+    const day = await dayOf('2026-07-11');
+    expect(day.chargeSessions[0].amount).toBe(885);
+    expect(day.chargeSessions[0].station).toBe('Keells');
+  });
+
+  it('does not double a day when the same file is imported twice', async () => {
+    const days = [{ date: '2026-07-13', sessions: [{ id: 'csv-aaa', amount: 885 }] }];
+    await post(days);
+    await post(days);
+    const sessions = (await dayOf('2026-07-13')).chargeSessions;
+    expect(sessions).toHaveLength(1);
+    expect(sessions.reduce((s, x) => s + x.amount, 0)).toBe(885);
+  });
+
+  it('keeps a session the driver logged by hand', async () => {
+    await call('PUT', '/entries/2026-07-14/charging', {
+      token: driverToken,
+      body: { sessions: [{ id: 'chg-manual', amount: 2400, station: 'home' }] },
+    });
+    await post([{ date: '2026-07-14', sessions: [{ id: 'csv-bbb', amount: 885 }] }]);
+    const sessions = (await dayOf('2026-07-14')).chargeSessions;
+    expect(sessions).toHaveLength(2);
+    expect(sessions.find((s) => s.amount === 2400)).toBeTruthy();
+  });
+
+  /** The route writes one column. Everything else on the day is somebody else's. */
+  it('leaves revenue, distance and the day-off flag alone', async () => {
+    await call('PUT', '/entries/2026-07-15', {
+      token: ownerToken,
+      body: { revenue: 12000, trips: 9, uberKm: 210 },
+    });
+    await call('PUT', '/entries/2026-07-15/off', { token: driverToken, body: { off: true } });
+    await post([{ date: '2026-07-15', sessions: [{ id: 'csv-ccc', amount: 500 }] }]);
+    const day = await dayOf('2026-07-15');
+    expect(day.revenue).toBe(12000);
+    expect(day.trips).toBe(9);
+    expect(day.uberKm).toBe(210);
+    expect(day.offDay).toBe(true);
+    expect(day.chargeSessions).toHaveLength(1);
+  });
+
+  it('refuses a body that is not a list of days', async () => {
+    expect((await post(undefined)).status).toBe(400);
+  });
+
+  it('needs a token', async () => {
+    const res = await call('POST', '/entries/charging/import', { body: { days: [] } });
+    expect(res.status).toBe(401);
+  });
+});
+
+/**
+ * Cash that is not a fare: the float the owner hands over to start a month, and
+ * what the driver spends out of it.
+ *
+ * The checkbox is the whole distinction. A one-off he paid for in cash is money
+ * he can no longer hand back, so it comes off his balance exactly as a handover
+ * does. One the owner settled directly is still a cost, but it never touched
+ * that cash — taking it off here would say he owes less than he does.
+ */
+describe('the starting float and cash expenses', () => {
+  const setCosts = (costs) => call('PUT', '/costs', { token: ownerToken, body: { costs } });
+  const setFloat = async (month, amount) => {
+    const cur = (await call('GET', '/settings', { token: ownerToken })).body;
+    return call('PUT', '/settings', {
+      token: ownerToken,
+      body: { ...cur, cashFloats: { ...(cur.cashFloats || {}), [month]: amount } },
+    });
+  };
+  const cash = async () => (await call('GET', '/summary?month=2026-07', { token: ownerToken })).body.cash;
+
+  it('adds the float to what the driver is carrying', async () => {
+    const before = (await cash()).holding;
+    await setFloat('2026-07', 5000);
+    expect((await cash()).startingFloat).toBe(5000);
+    expect((await cash()).holding).toBe(before + 5000);
+  });
+
+  it('takes a cash-paid expense off what he owes', async () => {
+    await setFloat('2026-07', 5000);
+    const before = (await cash()).holding;
+    await setCosts([
+      { id: 'wash', label: 'Car wash', category: 'other', frequency: 'once', amount: 800, date: '2026-07-14', paidByDriverCash: true },
+    ]);
+    const after = await cash();
+    expect(after.cashExpenses).toBe(800);
+    expect(after.holding).toBe(before - 800);
+    expect(after.cashExpenseLines[0].label).toBe('Car wash');
+  });
+
+  it('ignores an expense the owner paid directly', async () => {
+    await setCosts([
+      { id: 'tyres', label: 'Tyres', category: 'maintenance', frequency: 'once', amount: 40000, date: '2026-07-14', paidByDriverCash: false },
+    ]);
+    const after = await cash();
+    expect(after.cashExpenses).toBe(0);
+    expect(after.cashExpenseLines).toEqual([]);
+  });
+
+  /**
+   * The tick is honoured on any frequency, at whatever the cost contributes to
+   * the month. It used to apply only to dated one-offs, which meant the box
+   * could be ticked on a recurring line and silently do nothing — worse than
+   * either allowing it or refusing it out loud.
+   */
+  it('counts a recurring cost at its share of the month', async () => {
+    await setCosts([
+      { id: 'ins', label: 'Insurance', category: 'insurance', frequency: 'annual', amount: 120000, date: '2026-07-01', paidByDriverCash: true },
+    ]);
+    // 120,000 a year is 10,000 of this month.
+    expect((await cash()).cashExpenses).toBe(10000);
+  });
+
+  it('counts nothing for a cost nobody ticked, whatever its frequency', async () => {
+    await setCosts([
+      { id: 'ins', label: 'Insurance', category: 'insurance', frequency: 'annual', amount: 120000, date: '2026-07-01' },
+      { id: 'lease', label: 'Lease', category: 'lease', frequency: 'monthly', amount: 52000, date: '2026-01-01' },
+    ]);
+    expect((await cash()).cashExpenses).toBe(0);
+  });
+
+  /**
+   * The shape that made this look broken on a real screen: two expenses, ticked,
+   * saved — and contributing nothing, because a one-off with no date belongs to
+   * no month. `monthlyAmount` dates a one-off BY its date, so a null there is
+   * not "undated", it is "never". The editor now fills the date when the
+   * frequency is switched and warns if it is cleared; this pins the arithmetic
+   * that made the omission silent.
+   */
+  it('counts nothing for a one-off with no date, and everything once it has one', async () => {
+    await setCosts([
+      { id: 'svc', label: 'Service Cost', category: 'other', frequency: 'once', amount: 550, date: null, paidByDriverCash: true },
+    ]);
+    expect((await cash()).cashExpenses).toBe(0);
+
+    await setCosts([
+      { id: 'svc', label: 'Service Cost', category: 'other', frequency: 'once', amount: 550, date: '2026-07-09', paidByDriverCash: true },
+    ]);
+    const after = await cash();
+    expect(after.cashExpenses).toBe(550);
+    expect(after.cashExpenseLines[0].date).toBe('2026-07-09');
+  });
+
+  it('ignores an expense dated in another month', async () => {
+    await setCosts([
+      { id: 'aug', label: 'August wash', category: 'other', frequency: 'once', amount: 900, date: '2026-08-03', paidByDriverCash: true },
+    ]);
+    expect((await cash()).cashExpenses).toBe(0);
+  });
+
+  it('counts the float and the expenses in what is due back at month end', async () => {
+    await setCosts([]);
+    await setFloat('2026-07', 5000);
+    const plain = (await cash()).projectedCash;
+    await setCosts([
+      { id: 'wash', label: 'Car wash', category: 'other', frequency: 'once', amount: 800, date: '2026-07-14', paidByDriverCash: true },
+    ]);
+    // The float settles with the month, so it is owed back; what he spent out of
+    // it is not.
+    expect((await cash()).projectedCash).toBe(plain - 800);
+  });
+
+  it('drops a float set to zero rather than storing it', async () => {
+    await setFloat('2026-07', 0);
+    const res = await call('GET', '/settings', { token: ownerToken });
+    expect(res.body.cashFloats['2026-07']).toBeUndefined();
   });
 });

@@ -47,18 +47,32 @@ export const COST_FREQUENCIES = [
  *
  * Charging is his to influence: he chooses where and when to plug in, and the
  * difference between the cheapest and dearest CCS2 tariff is nearly threefold.
- * Everything else — the lease, depreciation, insurance, the revenue licence — is
- * the owner's commercial position and none of his business.
+ *
+ * `other` is the catch-all, and it is where the day-to-day expenses of driving
+ * land — a wash, parking, an air top-up, the things he pays for himself out of
+ * the cash he carries. Showing him a cost he incurred and often paid for is the
+ * opposite of exposing the owner's position, so it is permitted here.
+ *
+ * The lease, depreciation, insurance and the revenue licence stay out. They are
+ * the owner's commercial position and none of the driver's business.
+ *
+ * PERMITTED is not the same as shown. Nothing in `other` appears on his screen
+ * until the owner ticks that line, because the catch-all is exactly where an
+ * owner-only figure is most likely to be filed by accident — so the decision is
+ * made per line rather than granted wholesale to a category.
  *
  * This is a whitelist because the alternative failed open. Visibility used to be
  * a per-line flag, so ticking "driver sees" on the lease would have shown him the
- * lease; the category gate now means that flag can only ever HIDE something
- * inside the whitelist, never reveal something outside it. Adding a driver-facing
+ * lease; the category gate means that flag can only ever HIDE something inside
+ * the whitelist, never reveal something outside it. Adding a driver-facing
  * category is a deliberate edit here, which is where a decision like that belongs.
  */
-export const DRIVER_VISIBLE_CATEGORIES = ['charging'];
+export const DRIVER_VISIBLE_CATEGORIES = ['charging', 'other'];
 
-/** Kept as the default-on list within the whitelist. */
+/**
+ * Default-on within the whitelist. Charging only: an `other` line has to be
+ * ticked, for the reason above.
+ */
 export const DRIVER_VISIBLE_BY_DEFAULT = ['charging'];
 
 /** Is this category one a driver is ever allowed to be shown? */
@@ -245,6 +259,48 @@ export function daySessionTotal(entry) {
   return counted > 0 ? { total: round2(total), sessions: counted } : null;
 }
 
+/**
+ * The kinds of charging a session can be.
+ *
+ * Worth telling apart because they are different costs with different levers.
+ * Fast charging is bought at a station, arrives with a receipt, and is the
+ * expensive one. Home charging is metered on the house bill, is roughly a third
+ * of the price off-peak, and is the thing the map card exists to push the driver
+ * towards. A month's rate per km means little until you know which mix produced
+ * it — and "charge at home more" is only actionable advice if the screen can
+ * show how much of the month was not.
+ *
+ * A session written before this existed has no type. That reads as `unknown`
+ * rather than being assumed to be either: guessing would put home charging into
+ * the expensive column, or the reverse, and quietly move a figure the driver is
+ * being asked to act on.
+ */
+export const CHARGE_TYPES = [
+  { key: 'fast', label: 'Fast / public' },
+  { key: 'home', label: 'Home' },
+];
+
+export function chargeType(session) {
+  return CHARGE_TYPES.some((t) => t.key === session?.type) ? session.type : 'unknown';
+}
+
+/**
+ * A day's logged charging, split by where it was bought.
+ *
+ * Totals only — the count of sessions per kind is not something any card asks
+ * for, and the split is about money.
+ */
+export function dayChargingByType(entry) {
+  const sessions = Array.isArray(entry?.chargeSessions) ? entry.chargeSessions : [];
+  const out = { fast: 0, home: 0, unknown: 0 };
+  for (const session of sessions) {
+    const amount = Number(session?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    out[chargeType(session)] += amount;
+  }
+  return { fast: round2(out.fast), home: round2(out.home), unknown: round2(out.unknown) };
+}
+
 /** kWh logged for a day, when every session recorded it. */
 export function dayKwh(entry) {
   const sessions = Array.isArray(entry?.chargeSessions) ? entry.chargeSessions : [];
@@ -308,6 +364,7 @@ export function chargingForMonth(entries, chargingCosts, month) {
       km,
       kwh: logged ? dayKwh(entry) : null,
       sessions: logged ? logged.sessions : 0,
+      byType: logged ? dayChargingByType(entry) : null,
       estimated: !logged,
       // Only a day with both halves can carry a rate.
       perKm: cost > 0 && km > 0 ? round2(cost / km) : null,
@@ -318,11 +375,26 @@ export function chargingForMonth(entries, chargingCosts, month) {
   const logged = round2(days.filter((d) => !d.estimated).reduce((s, d) => s + d.cost, 0));
   const modelled = round2(days.filter((d) => d.estimated).reduce((s, d) => s + d.cost, 0));
 
+  // The split across the month, over LOGGED days only. A modelled day has no
+  // sessions and therefore no kind — folding it in would attribute a budget
+  // figure to a place the car was never plugged in.
+  const byType = days.reduce(
+    (acc, d) => {
+      if (!d.byType) return acc;
+      acc.fast += d.byType.fast;
+      acc.home += d.byType.home;
+      acc.unknown += d.byType.unknown;
+      return acc;
+    },
+    { fast: 0, home: 0, unknown: 0 },
+  );
+
   return {
     days,
     total: round2(logged + modelled),
     logged,
     modelled,
+    byType: { fast: round2(byType.fast), home: round2(byType.home), unknown: round2(byType.unknown) },
     loggedDays: days.filter((d) => !d.estimated).length,
     modelledDays: days.filter((d) => d.estimated).length,
     ...matchedRate(days),

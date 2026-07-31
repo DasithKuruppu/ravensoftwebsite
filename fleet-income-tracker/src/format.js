@@ -1,4 +1,14 @@
-/** Currency + number formatting. Everything money-shaped goes through here. */
+/**
+ * Currency + number formatting. Everything money-shaped goes through here.
+ *
+ * Digits stay Latin in both languages. A Sinhala-reading driver reads 121,395
+ * exactly as fast as an English-reading one — Sinhala has no separate digit set
+ * in daily use, and the numeric keyboard he types a handover into has none
+ * either. What does move is every word attached to a number: the currency, the
+ * unit, the month, the weekday, and "3 h ago". Those come from the dictionary,
+ * which is why this module reads the locale directly.
+ */
+import { translate, getLocale } from './i18n/i18n.js';
 
 const lkr = new Intl.NumberFormat('en-LK', {
   minimumFractionDigits: 2,
@@ -6,6 +16,9 @@ const lkr = new Intl.NumberFormat('en-LK', {
 });
 
 const plain = new Intl.NumberFormat('en-LK', { maximumFractionDigits: 0 });
+
+/** "LKR" / "රු" — the unit that precedes an amount. */
+const unit = () => translate('unit.currency');
 
 /**
  * Money is shown in whole rupees.
@@ -21,8 +34,8 @@ const plain = new Intl.NumberFormat('en-LK', { maximumFractionDigits: 0 });
 
 /** "LKR 121,395" — non-breaking space so the unit never wraps off its number. */
 export function money(n) {
-  if (n === null || n === undefined || Number.isNaN(n)) return 'LKR\u00a0—';
-  return `LKR\u00a0${plain.format(n)}`;
+  if (n === null || n === undefined || Number.isNaN(n)) return `${unit()}\u00a0—`;
+  return `${unit()}\u00a0${plain.format(n)}`;
 }
 
 /** "121,395" — for table cells where the LKR prefix would be noise. */
@@ -33,8 +46,8 @@ export function amount(n) {
 
 /** "LKR 121,394.60" — settlement and reconciliation only. */
 export function moneyExact(n) {
-  if (n === null || n === undefined || Number.isNaN(n)) return 'LKR\u00a0—';
-  return `LKR\u00a0${lkr.format(n)}`;
+  if (n === null || n === undefined || Number.isNaN(n)) return `${unit()}\u00a0—`;
+  return `${unit()}\u00a0${lkr.format(n)}`;
 }
 
 /** "121,394.60" — the same, without the unit. */
@@ -61,7 +74,7 @@ export function count(n) {
 
 export function km(n) {
   if (n === null || n === undefined || Number.isNaN(n)) return '—';
-  return `${lkr.format(n)} km`;
+  return `${lkr.format(n)} ${translate('unit.km')}`;
 }
 
 export function pct(n) {
@@ -69,14 +82,24 @@ export function pct(n) {
   return `${n > 0 ? '+' : ''}${n.toFixed(1)}%`;
 }
 
-/** "March 2026" */
+/**
+ * "March 2026" / "මාර්තු 2026"
+ *
+ * Assembled from the dictionary rather than handed to `Intl` with an `si-LK`
+ * locale. Two reasons: the English output has to stay byte-identical (its shape
+ * is asserted elsewhere and read by the owner), and Sinhala month names are the
+ * one place where the transliterated form everyone uses differs from what the
+ * CLDR data would give us.
+ */
 export function monthLabel(month) {
   const [y, m] = month.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-GB', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
+  return `${translate(`month.${m}`)} ${y}`;
+}
+
+/** "March" — the month on its own, for "Full plan from March". */
+export function monthName(month) {
+  const [, m] = month.split('-').map(Number);
+  return translate(`month.${m}`);
 }
 
 export function shiftMonth(month, delta) {
@@ -99,13 +122,61 @@ export function todayLocal() {
   }).format(new Date());
 }
 
+/**
+ * The moment a document was produced: "31 Jul 2026, 17:42".
+ *
+ * Colombo time, like every other date the app decides, so a statement generated
+ * at 00:30 local is not stamped with yesterday from a UTC clock. The clock is
+ * 24-hour and the digits Latin in both languages — the month name is the only
+ * part that translates, which is the same rule the rest of the app follows.
+ *
+ * Separate from `stamp` below, which hands the job to `toLocaleString` with an
+ * `si-LK` locale. That is right for a tooltip but wrong here: it would print
+ * CLDR's Sinhala month names, and `monthLabel` exists precisely because those
+ * differ from the transliterated forms everyone actually uses. A document should
+ * spell the month the way the rest of the app does.
+ *
+ * `at` is injectable so the stamp can be tested rather than depending on when
+ * the suite happens to run.
+ */
+export function generatedAt(at = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Colombo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(at);
+  const get = (type) => parts.find((p) => p.type === type)?.value ?? '';
+  const date = `${get('year')}-${get('month')}-${get('day')}`;
+  return `${dateLabel(date)} ${get('year')}, ${get('hour')}:${get('minute')}`;
+}
+
+/** "Mon, 21 Jul" / "සඳු, 21 ජූලි" */
 export function dayLabel(date) {
   const d = new Date(`${date}T00:00:00Z`);
-  return d.toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    timeZone: 'UTC',
+  return `${translate(`weekday.${d.getUTCDay()}`)}, ${dateLabel(date)}`;
+}
+
+/**
+ * "21 Jul" — the same date without its weekday.
+ *
+ * Its own function rather than a regex over `dayLabel`: the partial-month banner
+ * used to strip the weekday with a leading-word-character pattern, and a word
+ * character matches no Sinhala letter at all, so that line would have kept its
+ * weekday in one language and lost it in the other.
+ *
+ * The two halves are ordered by `format.dateLabel` rather than hardcoded here:
+ * Sinhala reads the month first ("ජූලි 21"), English the day.
+ */
+export function dateLabel(date) {
+  const d = new Date(`${date}T00:00:00Z`);
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return translate('format.dateLabel', {
+    day,
+    month: translate(`monthShort.${d.getUTCMonth() + 1}`),
   });
 }
 
@@ -122,17 +193,17 @@ export function ago(iso, ageSeconds) {
   let ms;
   if (ageSeconds !== null && ageSeconds !== undefined) ms = ageSeconds * 1000;
   else if (iso) ms = Date.now() - Date.parse(iso);
-  if (!Number.isFinite(ms)) return { text: 'time unknown', minutes: null };
+  if (!Number.isFinite(ms)) return { text: translate('time.unknown'), minutes: null };
 
   const minutes = Math.round(ms / 60000);
   const text =
     minutes < 1
-      ? 'just now'
+      ? translate('time.justNow')
       : minutes < 60
-        ? `${minutes} min ago`
+        ? translate('time.minutes', { count: minutes })
         : minutes < 1440
-          ? `${Math.round(minutes / 60)} h ago`
-          : `${Math.round(minutes / 1440)} d ago`;
+          ? translate('time.hours', { count: Math.round(minutes / 60) })
+          : translate('time.days', { count: Math.round(minutes / 1440) });
   return { text, minutes };
 }
 
@@ -142,5 +213,8 @@ export function stamp(iso) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
     ? ''
-    : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    : d.toLocaleString(getLocale() === 'si' ? 'si-LK' : undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
 }

@@ -6,14 +6,7 @@
  * divide a cost by a distance that came from a different set of days.
  */
 import { describe, it, expect } from 'vitest';
-import {
-  chargingForMonth,
-  chargingWindow,
-  daySessionTotal,
-  dayKwh,
-  dayKm,
-  matchedRate,
-} from './costs.mjs';
+import { chargingForMonth, chargingWindow, daySessionTotal, dayKwh, dayKm, matchedRate, isDriverPermitted, isDriverVisible, driverVisibleCosts, chargeType, dayChargingByType } from './costs.mjs';
 
 /** The configured fallback: a flat rate per day driven. */
 const PER_DAY = [{ category: 'charging', frequency: 'daily', amount: 2600 }];
@@ -199,5 +192,98 @@ describe('the trailing week', () => {
 
   it('has no rate when the window has nothing matched in it', () => {
     expect(chargingWindow(month, '2026-08-30').perKm).toBe(null);
+  });
+});
+
+/**
+ * Which cost lines a driver may be shown.
+ *
+ * The gate is a category whitelist rather than a per-line flag, so a tick can
+ * only ever hide something already inside it — never reveal something outside.
+ */
+describe('what the driver is allowed to see', () => {
+  it('permits charging and the catch-all, and nothing else', () => {
+    expect(isDriverPermitted({ category: 'charging' })).toBe(true);
+    expect(isDriverPermitted({ category: 'other' })).toBe(true);
+    for (const category of ['lease', 'depreciation', 'insurance', 'licence', 'maintenance', 'connectivity']) {
+      expect(isDriverPermitted({ category })).toBe(false);
+    }
+  });
+
+  /**
+   * `other` is the catch-all — the likeliest place for an owner-only figure to
+   * be filed by mistake — so it is off until the owner ticks that line.
+   */
+  it('shows an "other" line only once it is ticked', () => {
+    expect(isDriverVisible({ category: 'other', amount: 800 })).toBe(false);
+    expect(isDriverVisible({ category: 'other', amount: 800, driverVisible: true })).toBe(true);
+    expect(isDriverVisible({ category: 'other', amount: 800, driverVisible: false })).toBe(false);
+  });
+
+  it('still shows charging without anyone ticking anything', () => {
+    expect(isDriverVisible({ category: 'charging' })).toBe(true);
+  });
+
+  it('cannot be talked into revealing the lease by a tick', () => {
+    expect(isDriverVisible({ category: 'lease', driverVisible: true })).toBe(false);
+    expect(driverVisibleCosts([
+      { id: 'lease', category: 'lease', driverVisible: true, amount: 52000 },
+      { id: 'wash', category: 'other', driverVisible: true, amount: 800 },
+    ]).map((c) => c.id)).toEqual(['wash']);
+  });
+});
+
+/**
+ * Fast against home.
+ *
+ * Worth telling apart because they are different costs with different levers:
+ * fast is bought at a station with a receipt, home is metered on the house bill
+ * at roughly a third off-peak. "Charge at home more" is only actionable advice
+ * if the screen can show how much of the month was not.
+ */
+describe('charging split by where it was bought', () => {
+  const day = (date, sessions, km = 100) => ({ date, gpsKm: km, revenue: 5000, chargeSessions: sessions });
+
+  it('adds each kind up separately across the month', () => {
+    const out = chargingForMonth(
+      [
+        day('2026-07-01', [{ id: 'a', amount: 900, type: 'fast' }, { id: 'b', amount: 300, type: 'home' }]),
+        day('2026-07-02', [{ id: 'c', amount: 600, type: 'fast' }]),
+      ],
+      [],
+      '2026-07',
+    );
+    expect(out.byType).toEqual({ fast: 1500, home: 300, unknown: 0 });
+    expect(out.logged).toBe(1800);
+  });
+
+  /**
+   * A session written before the field existed is not assumed to be either.
+   * Guessing would file home charging in the expensive column, or the reverse,
+   * and move the very figure the driver is being asked to act on.
+   */
+  it('keeps an untyped session out of both columns', () => {
+    const out = chargingForMonth([day('2026-07-01', [{ id: 'a', amount: 900 }])], [], '2026-07');
+    expect(out.byType).toEqual({ fast: 0, home: 0, unknown: 900 });
+    expect(out.logged).toBe(900);
+  });
+
+  it('attributes nothing to a kind on a modelled day', () => {
+    // No sessions, so the cost is the configured rate — a budget figure, and the
+    // car was never plugged in anywhere it could be attributed to.
+    const out = chargingForMonth(
+      [{ date: '2026-07-01', gpsKm: 100, revenue: 5000, chargeSessions: [] }],
+      [{ id: 'charging', category: 'charging', frequency: 'perKm', amount: 12 }],
+      '2026-07',
+    );
+    expect(out.modelled).toBe(1200);
+    expect(out.byType).toEqual({ fast: 0, home: 0, unknown: 0 });
+  });
+
+  it('reads the kind off a session, defaulting to unknown', () => {
+    expect(chargeType({ type: 'fast' })).toBe('fast');
+    expect(chargeType({ type: 'home' })).toBe('home');
+    expect(chargeType({ type: 'petrol' })).toBe('unknown');
+    expect(chargeType({})).toBe('unknown');
   });
 });

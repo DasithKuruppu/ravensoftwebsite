@@ -25,6 +25,7 @@ import {
   monthFactor,
   operatingDays,
 } from '../shared/commission.mjs';
+import { mergeSessions } from '../shared/chargeCsv.mjs';
 import { store, DEFAULT_DRIVER } from './store.mjs';
 import { login, verifyToken, isOwner } from './auth.mjs';
 import {
@@ -33,8 +34,10 @@ import {
   driverVisibleCosts,
   chargingForMonth,
   chargingWindow,
+  monthlyAmount,
   COST_CATEGORIES,
   COST_FREQUENCIES,
+  CHARGE_TYPES,
 } from '../shared/costs.mjs';
 import {
   credentials as dagpsCredentials,
@@ -127,6 +130,12 @@ async function route(method, path, event, cors) {
       uberKm: existing?.uberKm ?? null,
       gpsKm: existing?.gpsKm ?? null,
       cashCollected: existing?.cashCollected ?? null,
+      // Marking a day off says nothing about what was charged on it, or what
+      // Uber billed — carried through for the same reason as everywhere else.
+      chargeSessions: existing?.chargeSessions ?? [],
+      uberFees: existing?.uberFees ?? null,
+      uberFeeLines: existing?.uberFeeLines ?? null,
+      uberTaxLines: existing?.uberTaxLines ?? null,
       source: existing?.source ?? 'manual',
       offDay: off,
     });
@@ -167,6 +176,58 @@ async function route(method, path, event, cors) {
     return json(200, { date, chargeSessions: saved.chargeSessions ?? [] }, cors);
   }
 
+  /**
+   * Charging sessions from the network's own export.
+   *
+   * The driver may write this for the same reason he may write a single session:
+   * it is his own cost record, and he is the one with the account. The route
+   * touches `chargeSessions` and nothing else — revenue, distance and the day-off
+   * flag are carried through untouched, so an import of what he paid to plug in
+   * can never become a way to edit the takings.
+   *
+   * Sessions merge by id, so importing the same file twice — or two files whose
+   * date ranges overlap — replaces those sessions rather than doubling the day.
+   */
+  if (method === 'POST' && path === '/entries/charging/import') {
+    const days = Array.isArray(body.days) ? body.days : null;
+    if (!days) {
+      return json(400, { error: 'invalid_days', message: 'days must be an array' }, cors);
+    }
+    let written = 0;
+    let sessionCount = 0;
+    for (const day of days.slice(0, MAX_IMPORT_DAYS)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day?.date || ''))) continue;
+      const incoming = (Array.isArray(day.sessions) ? day.sessions : [])
+        .map(cleanSession)
+        .filter(Boolean)
+        .slice(0, MAX_SESSIONS_PER_DAY);
+      if (!incoming.length) continue;
+
+      const existing = await store.getEntry(DRIVER_ID, day.date);
+      const sessions = mergeSessions(existing?.chargeSessions ?? [], incoming).slice(
+        0,
+        MAX_SESSIONS_PER_DAY,
+      );
+      await store.putEntry(DRIVER_ID, {
+        date: day.date,
+        revenue: existing?.revenue ?? 0,
+        trips: existing?.trips ?? null,
+        uberKm: existing?.uberKm ?? null,
+        gpsKm: existing?.gpsKm ?? null,
+        cashCollected: existing?.cashCollected ?? null,
+        uberFees: existing?.uberFees ?? null,
+        uberFeeLines: existing?.uberFeeLines ?? null,
+        uberTaxLines: existing?.uberTaxLines ?? null,
+        offDay: existing?.offDay === true,
+        source: existing?.source ?? 'manual',
+        chargeSessions: sessions,
+      });
+      written += 1;
+      sessionCount += incoming.length;
+    }
+    return json(200, { days: written, sessions: sessionCount }, cors);
+  }
+
   const entryMatch = path.match(/^\/entries\/(\d{4}-\d{2}-\d{2})$/);
   if (entryMatch) {
     const date = entryMatch[1];
@@ -176,6 +237,12 @@ async function route(method, path, event, cors) {
       return json(403, { error: 'forbidden', message: READ_ONLY }, cors);
     }
     if (method === 'PUT') {
+      // This form owns revenue, trips, distance and cash — and nothing else. The
+      // day-off flag, the charging log and Uber's own fee lines are written by
+      // other routes, and `putEntry` replaces the whole item, so anything not
+      // named here is destroyed by an edit. Editing one day's revenue used to
+      // clear the day-off mark and every charge session on it.
+      const existing = await store.getEntry(DRIVER_ID, date);
       const entry = {
         date,
         revenue: toNumber(body.revenue) ?? 0,
@@ -183,7 +250,13 @@ async function route(method, path, event, cors) {
         uberKm: toNumber(body.uberKm),
         gpsKm: toNumber(body.gpsKm),
         cashCollected: toNumber(body.cashCollected),
-        offDay: body.offDay === true,
+        // Still settable here, so the owner can correct a mis-marked day; only
+        // an absent field falls back to what is stored.
+        offDay: body.offDay === undefined ? existing?.offDay === true : body.offDay === true,
+        chargeSessions: existing?.chargeSessions ?? [],
+        uberFees: existing?.uberFees ?? null,
+        uberFeeLines: existing?.uberFeeLines ?? null,
+        uberTaxLines: existing?.uberTaxLines ?? null,
         source: ['manual', 'csv', 'api'].includes(body.source) ? body.source : 'manual',
       };
       return json(200, await store.putEntry(DRIVER_ID, entry), cors);
@@ -197,20 +270,23 @@ async function route(method, path, event, cors) {
   // The driver's own monthly goal — HIS to set, not the owner's to hand down.
   // A target someone else picks is a quota; the point of this figure is that he
   // chose it. So this one field is writable by either role, while the rest of
-  // the settings record stays owner-only below. Nothing is calculated from it:
-  // it cannot move his pay, only what his screen asks of him.
+  // the settings record stays owner-only below. It is revenue, and his pay is
+  // derived from it — but it still cannot MOVE his pay, only what his screen
+  // asks of him: payroll reads the plan and the revenue actually earned.
   if (path === '/settings/target' && method === 'PUT') {
     const current = await store.getSettings(DRIVER_ID);
-    const asked = toNumber(body.payTarget);
-    if (asked === undefined && body.payTarget !== null) {
-      return json(400, { error: 'invalid_target', message: 'payTarget must be a number' }, cors);
+    const asked = toNumber(body.revenueTarget);
+    if (asked === undefined && body.revenueTarget !== null) {
+      return json(400, { error: 'invalid_target', message: 'revenueTarget must be a number' }, cors);
     }
     // null clears it. Otherwise clamp: a target of five million a month is not a
     // goal, and a negative one is not a target at all.
-    const payTarget =
-      body.payTarget === null ? null : Math.min(5_000_000, Math.max(0, round2(asked)));
-    const next = await store.putSettings(DRIVER_ID, { ...current, payTarget });
-    return json(200, { payTarget: next.payTarget ?? null }, cors);
+    const revenueTarget =
+      body.revenueTarget === null ? null : Math.min(5_000_000, Math.max(0, round2(asked)));
+    // The old take-home field goes with it. Leaving it behind would let the
+    // display layer's legacy conversion resurrect a goal he has just cleared.
+    const next = await store.putSettings(DRIVER_ID, { ...current, revenueTarget, payTarget: null });
+    return json(200, { revenueTarget: next.revenueTarget ?? null }, cors);
   }
 
   /**
@@ -311,8 +387,17 @@ async function route(method, path, event, cors) {
         // `null` clears the field; `undefined` (absent from the body) keeps it.
         // Without the distinction an emptied box in Settings silently kept the
         // old figure, since a blank input parses to no number rather than zero.
+        // Cash the owner hands the driver to start a month with — a float, not
+        // income. Keyed by month because it is a decision taken each month, and
+        // a single standing figure would silently apply to months it was never
+        // given in.
+        cashFloats: cleanFloats(body.cashFloats, current.cashFloats),
         // The driver sets this himself via /settings/target; the owner can
         // also set it here, for the first one or when he asks for a hand.
+        revenueTarget: clearable(body.revenueTarget, current.revenueTarget),
+        // The take-home goal this replaced. Still readable so a record saved
+        // before the change can be converted on the way to the screen, but
+        // nothing writes a new one.
         payTarget: clearable(body.payTarget, current.payTarget),
         // How imported revenue is recorded, and what Uber takes off the fare.
         revenueBasis:
@@ -331,6 +416,13 @@ async function route(method, path, event, cors) {
           typeof body.driverName === 'string' && body.driverName.trim()
             ? body.driverName.trim().slice(0, 40)
             : current.driverName || 'Driver',
+        // Optional, and clearable: an empty box means the Latin name is used in
+        // both languages, so a blank has to be storable rather than ignored the
+        // way a blank `driverName` falls back to the current one.
+        driverNameSi:
+          typeof body.driverNameSi === 'string'
+            ? body.driverNameSi.trim().slice(0, 40)
+            : current.driverNameSi || '',
         csvMapping: body.csvMapping === undefined ? current.csvMapping ?? null : body.csvMapping,
       };
       if (next.bandEnd <= next.bandStart) {
@@ -503,12 +595,30 @@ async function buildSummary(month, auth) {
   // spreading a shortfall over six days when five remained. And on a day whose
   // figures HAD arrived, today dropped out of the count entirely, as though the
   // shift ended when the import ran.
-  const todayDay = Number(todayInColombo().slice(8, 10));
+  // Measured against the month being VIEWED, not against the bare day number.
+  // `daysInMonth - todayDay + 1` assumed the requested month was the current
+  // one: asked for August on the 28th of July it returned 4, so the driver's
+  // screen divided a whole month's goal by four days and told him to earn
+  // 91,000 a day. A finished month got the mirror image — three days left in
+  // June, and a hero still issuing instructions for a month that ended.
+  const today = todayInColombo();
+  const todayDay = Number(today.slice(8, 10));
+  const monthNow = today.slice(0, 7);
   const firstOperatingDay = daysInMonth - operatingTotal + 1;
-  const offFromToday = entries.filter(
-    (e) => e.offDay && Number(e.date.slice(8, 10)) >= todayDay,
-  ).length;
-  const projectedDays = Math.max(0, daysInMonth - todayDay + 1 - offFromToday);
+  // Full dates rather than day-of-month numbers, for the same reason: `>= 28`
+  // counted an off day booked for the 3rd of August as already past.
+  const offFromToday = entries.filter((e) => e.offDay && e.date >= today).length;
+  const daysAhead =
+    month > monthNow
+      ? // Not started: every operating day is still ahead. `operatingTotal`
+        // already accounts for a start date partway through it.
+        operatingTotal
+      : month < monthNow
+        ? 0
+        : // In progress: today and everything after it, but never more days than
+          // the month actually operates.
+          Math.min(operatingTotal, daysInMonth - todayDay + 1);
+  const projectedDays = Math.max(0, daysAhead - offFromToday);
 
   // Days the CAR ran, which is a different question and drives the per-day
   // costs. A day with GPS distance but no Uber trips still burned electricity,
@@ -537,9 +647,20 @@ async function buildSummary(month, auth) {
   // Month end at that pace. Today counts for whichever is larger — what it has
   // already taken, or what a day at this pace brings — because a shift that has
   // done half a day's work by lunchtime has not finished at half a day.
-  const projectedRevenue = round2(
-    revenue - todayRevenue + dailyRate * Math.max(0, projectedDays - 1) + Math.max(dailyRate, todayRevenue),
-  );
+  //
+  // With no days ahead there is nothing to project: a finished month IS its
+  // revenue. Without this the formula still credits one final day at the pace —
+  // `max(dailyRate, todayRevenue)` with no today in the month — and every past
+  // month read a day richer than it was.
+  const projectedRevenue =
+    projectedDays === 0
+      ? revenue
+      : round2(
+          revenue -
+            todayRevenue +
+            dailyRate * Math.max(0, projectedDays - 1) +
+            Math.max(dailyRate, todayRevenue),
+        );
   // Distance for usage-based costs. GPS first: the tracker sees every kilometre
   // the car moves, whereas Uber only counts the on-trip leg — and the car is
   // charged for all of it. Uber's figure is a fallback for days with no GPS.
@@ -606,6 +727,8 @@ async function buildSummary(month, auth) {
     prorationFactor: Math.round(factor * 10000) / 10000,
     startDate: settings.startDate ?? null,
     driverName: settings.driverName || 'Driver',
+    // Blank unless the owner has given one; the display layer falls back.
+    driverNameSi: settings.driverNameSi || '',
     // What Uber takes off the fare, and whether stored revenue is already net of
     // it. Both roles: the driver's cost card shows where the fare went.
     // A settings row saved before these fields existed has neither. Absent must
@@ -614,9 +737,13 @@ async function buildSummary(month, auth) {
     // inventing a 25% fee nobody is charged.
     revenueBasis: settings.revenueBasis === 'net' ? 'net' : 'gross',
     uberCommissionRate: clampRate(settings.uberCommissionRate ?? 0),
-    // What he wants to take home this month. His own figure — he sets it
-    // himself, see /settings/target — and the display layer works out the
-    // revenue it needs from the plan that applies to this month.
+    // The revenue he wants this month. His own figure — he sets it himself,
+    // see /settings/target — and the display layer prorates it and works out
+    // what the plan pays on it.
+    revenueTarget: settings.revenueTarget ?? null,
+    // The take-home goal this replaced, sent so a record written before the
+    // change still produces a goal instead of an empty card. `display.js`
+    // converts it through the plan; nothing writes it any more.
     payTarget: settings.payTarget ?? null,
     // The same run-rate the projection extrapolates, so the two figures always
     // agree — over complete days worked, so neither time off nor a shift still in
@@ -696,6 +823,10 @@ async function buildSummary(month, auth) {
     projectedRevenue,
     projectedPay: projected.total,
     today: todayInColombo(),
+    // Two movements of cash that are not fares: the float the owner handed him
+    // to start the month with, and anything he paid for out of that cash.
+    float: round2(Number(settings.cashFloats?.[month]) || 0),
+    cashExpenses: cashExpensesForMonth(allCosts, month, { daysDriven, kmDriven }),
   });
 
   // Both roles: it is his own logging, and the whitelist already covers charging.
@@ -705,6 +836,9 @@ async function buildSummary(month, auth) {
     modelled: charging.modelled,
     loggedDays: charging.loggedDays,
     modelledDays: charging.modelledDays,
+    // The split across logged sessions: fast, home, and anything logged before
+    // the kind was asked for.
+    byType: charging.byType,
     perKm: charging.perKm,
     matchedDays: charging.matchedDays,
     matchedKm: charging.matchedKm,
@@ -1103,6 +1237,12 @@ export async function importRows(rows) {
         : existing?.uberTaxLines ?? null,
       // never clobber GPS mileage — that comes from the DAGPS sync
       gpsKm: existing?.gpsKm ?? null,
+      // Nor the two records no CSV can describe. `putEntry` replaces the whole
+      // item, so a column the writer omits is a column it deletes: importing
+      // over a day the driver had marked off silently un-marked it, and took his
+      // charging log with it. Both are his own writes and no import owns them.
+      offDay: existing?.offDay === true,
+      chargeSessions: existing?.chargeSessions ?? [],
       source: 'csv',
     };
     written.push(await store.putEntry(DRIVER_ID, entry));
@@ -1758,7 +1898,17 @@ const DEFAULT_CASH_SHARE = 0.5;
  * over, but a slow month on a good tier can leave the owner owing HIM. Naming
  * only the first case would make the second look like an error.
  */
-function buildCash({ entries, handovers, revenue, cashCollected, projectedRevenue, projectedPay, today }) {
+function buildCash({
+  entries,
+  handovers,
+  revenue,
+  cashCollected,
+  projectedRevenue,
+  projectedPay,
+  today,
+  float: startingFloat = 0,
+  cashExpenses = { total: 0, lines: [] },
+}) {
   const confirmed = round2(handovers.filter((h) => h.confirmed).reduce((s, h) => s + h.amount, 0));
   const pending = round2(handovers.filter((h) => !h.confirmed).reduce((s, h) => s + h.amount, 0));
 
@@ -1770,20 +1920,43 @@ function buildCash({ entries, handovers, revenue, cashCollected, projectedRevenu
   const projectedCash = round2(projectedRevenue * fallback.share);
   const settlement = round2(projectedCash - projectedPay);
 
+  // What he is carrying, and what he owes on it.
+  //
+  //   + fares taken in cash        money that never reached the bank
+  //   + the float                  the owner's own cash, handed over to start
+  //   − what he spent out of it    a receipt is as good as a handover
+  //   − what he has handed back
+  //
+  // The float settles with the month: he hands it back with the takings and is
+  // given a fresh one, so it belongs inside the total rather than beside it.
+  const inHand = round2(cashCollected + startingFloat - cashExpenses.total);
+
   return {
     collected: cashCollected,
     confirmed,
     pending,
-    holding: round2(cashCollected - confirmed),
+    startingFloat: round2(startingFloat),
+    // Only what he paid out of the cash. A cost the owner settled directly is
+    // still a cost, but it never left the driver's pocket — taking it off here
+    // would say he owes less than he does.
+    cashExpenses: round2(cashExpenses.total),
+    cashExpenseLines: cashExpenses.lines,
+    inHand,
+    holding: round2(inHand - confirmed),
     cashShare: fallback.share,
     cashShareBasis: fallback.basis,
     cashShareDays: fallback.days,
-    projectedCash,
+    // Everything due back at month end: the month's cash plus the float, less
+    // what he spent out of it.
+    projectedCash: round2(projectedCash + startingFloat - cashExpenses.total),
     // Positive: he hands the difference over. Negative: the owner owes him.
     settlement,
     handovers: [...handovers].sort((a, b) => b.date.localeCompare(a.date)),
   };
 }
+
+/** One upload cannot rewrite more than a season of days. */
+const MAX_IMPORT_DAYS = 200;
 
 /** More than this in one day is a mis-entry, not a day's charging. */
 const MAX_SESSIONS_PER_DAY = 12;
@@ -1802,6 +1975,11 @@ function cleanSession(session) {
     amount: round2(amount),
     station: session?.station ? String(session.station).slice(0, 60) : '',
     kwh: kwh !== undefined && kwh > 0 ? round2(kwh) : null,
+    // Fast or home. Anything else — including a session written before the field
+    // existed — stays null rather than being assumed: guessing would file home
+    // charging in the expensive column, or the reverse, and move a figure the
+    // driver is being asked to act on.
+    type: CHARGE_TYPES.some((t) => t.key === session?.type) ? session.type : null,
   };
 }
 
@@ -1835,6 +2013,59 @@ function withChargingActuals(costs, charging) {
 }
 
 /** Normalise a cost line before storing it. */
+/**
+ * The per-month cash floats, as `{ '2026-07': 5000 }`.
+ *
+ * A month set to zero is dropped rather than stored, so the record does not
+ * accumulate an entry for every month anyone ever opened the settings page.
+ */
+/**
+ * What the driver paid for out of the cash he is carrying, this month.
+ *
+ * Any cost the owner has ticked as paid by the driver in cash, at whatever it
+ * contributes to THIS month — the same `monthlyAmount` the cost card and the
+ * profit figure use, so one tick cannot make the two disagree. A one-off lands
+ * whole in the month it is dated; a recurring line contributes its share.
+ *
+ * The tick works on every kind of cost deliberately. Restricting it to one-offs
+ * meant the box could be ticked on a monthly line and quietly do nothing, which
+ * is worse than either allowing it or refusing it out loud.
+ *
+ * One caveat worth knowing: for an ANNUAL cost this is the month's twelfth, not
+ * the cash that actually left his hand in the month he paid it. Anything paid in
+ * a lump is better recorded as a one-off on the day it was paid, which is what
+ * the "Add driver expense" button creates.
+ */
+function cashExpensesForMonth(costs, month, usage = {}) {
+  const lines = (costs || [])
+    .filter((c) => c?.paidByDriverCash === true)
+    .map((c) => ({
+      id: c.id,
+      label: c.label,
+      category: c.category,
+      date: c.date || null,
+      amount: round2(monthlyAmount(c, month, usage)),
+    }))
+    .filter((l) => l.amount > 0)
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+  return { total: round2(lines.reduce((sum, l) => sum + l.amount, 0)), lines };
+}
+
+function cleanFloats(next, current) {
+  if (next === undefined) return current || {};
+  if (next === null) return {};
+  if (typeof next !== 'object') return current || {};
+  const out = {};
+  for (const [month, value] of Object.entries(next)) {
+    if (!/^\d{4}-\d{2}$/.test(month)) continue;
+    const amount = toNumber(value);
+    if (amount === undefined || !(amount > 0)) continue;
+    out[month] = Math.min(5_000_000, round2(amount));
+  }
+  return out;
+}
+
 function cleanCost(c) {
   const amount = toNumber(c?.amount);
   if (amount === undefined || amount < 0) return null;
@@ -1853,6 +2084,13 @@ function cleanCost(c) {
     // Whether the driver sees this line. Undefined falls back to the category
     // default, so existing charging lines become visible without re-entry.
     driverVisible: c.driverVisible === undefined ? undefined : c.driverVisible === true,
+    // Paid out of the cash the driver is carrying, rather than by the owner.
+    //
+    // It is still a cost either way — this only decides whose pocket it left. A
+    // cost the driver paid in cash is money he can no longer hand over, so it
+    // comes off his balance the way a handover does; one the owner settled
+    // directly never touched that cash and only moves profit.
+    paidByDriverCash: c.paidByDriverCash === true,
   };
 }
 

@@ -1,17 +1,32 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
-import { api, getToken, getRole, setSession, getDriverName, rememberDriverName } from './api.js';
+import {
+  api,
+  getToken,
+  getRole,
+  setSession,
+  getDriverName,
+  getDriverNameSi,
+  rememberDriverName,
+} from './api.js';
 import Dashboard from './pages/Dashboard.jsx';
 import DailyLog from './pages/DailyLog.jsx';
 import Validate from './pages/Validate.jsx';
 import Settings from './pages/Settings.jsx';
 import Login from './pages/Login.jsx';
+import Payslip from './pages/Payslip.jsx';
 import { currentMonth } from './format.js';
+import { useT, useLocale, LanguageToggle } from './i18n/index.jsx';
 
 export default function App() {
   const [role, setRole] = useState(() => (getToken() ? getRole() : null));
   const [month, setMonth] = useState(currentMonth);
   const [driverName, setDriverName] = useState(getDriverName);
+  const [driverNameSi, setDriverNameSi] = useState(getDriverNameSi);
+  const [locale] = useLocale();
+  // Whichever spelling the language being read has. Chosen at render rather than
+  // at fetch, so flipping the toggle renames the header immediately.
+  const shownName = locale === 'si' && driverNameSi ? driverNameSi : driverName;
 
   // The API client fires this whenever a call comes back 401 (expired token).
   useEffect(() => {
@@ -29,12 +44,14 @@ export default function App() {
     setSession(null, null);
     setRole(null);
     setDriverName('');
+    setDriverNameSi('');
   }, []);
 
   /** The summary is the only call that knows the name; hold on to it. */
-  const handleDriverName = useCallback((name) => {
+  const handleDriverName = useCallback((name, nameSi) => {
     setDriverName(name || '');
-    rememberDriverName(name);
+    setDriverNameSi(nameSi || '');
+    rememberDriverName(name, nameSi);
   }, []);
 
   if (!role) return <Login onLogin={handleLogin} />;
@@ -44,7 +61,7 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <Header
-        role={role === 'driver' && driverName ? driverName : role}
+        role={role === 'driver' && shownName ? shownName : role}
         isOwner={isOwner}
         onLogout={handleLogout}
       />
@@ -63,6 +80,9 @@ export default function App() {
             }
           />
           <Route path="/log" element={<DailyLog month={month} setMonth={setMonth} isOwner={isOwner} />} />
+          {/* His own pay document. Not in the tab bar: it is something you go
+              and fetch at the end of a month, not a screen you live on. */}
+          <Route path="/payslip" element={<Payslip month={month} />} />
           <Route
             path="/validate"
             element={isOwner ? <Validate month={month} setMonth={setMonth} /> : <Navigate to="/" replace />}
@@ -88,10 +108,11 @@ export default function App() {
  * the screen, within thumb reach and with no scrolling at any count.
  */
 function MobileNav({ isOwner }) {
-  const tabs = navTabs(isOwner);
+  const { t } = useT();
+  const tabs = navTabs(isOwner, t);
   return (
     <nav
-      className="sm:hidden fixed bottom-0 inset-x-0 z-20 border-t border-ink-800
+      className="no-print sm:hidden fixed bottom-0 inset-x-0 z-20 border-t border-ink-800
                  bg-ink-950 backdrop-blur"
       // Keep the tabs clear of the iPhone home indicator.
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -165,14 +186,14 @@ function TabIcon({ name, active }) {
 }
 
 /** Single source of truth for the tabs, shared by both navs. */
-function navTabs(isOwner) {
+function navTabs(isOwner, t) {
   return [
-    { to: '/', label: 'Dashboard', short: 'Dashboard', icon: 'dashboard' },
-    { to: '/log', label: 'Daily log', short: 'Log', icon: 'log' },
+    { to: '/', label: t('nav.dashboard'), short: t('nav.dashboard.short'), icon: 'dashboard' },
+    { to: '/log', label: t('nav.log'), short: t('nav.log.short'), icon: 'log' },
     ...(isOwner
       ? [
-          { to: '/validate', label: 'GPS check', short: 'GPS', icon: 'gps' },
-          { to: '/settings', label: 'Settings', short: 'Settings', icon: 'settings' },
+          { to: '/validate', label: t('nav.gps'), short: t('nav.gps.short'), icon: 'gps' },
+          { to: '/settings', label: t('nav.settings'), short: t('nav.settings.short'), icon: 'settings' },
         ]
       : []),
   ];
@@ -180,14 +201,17 @@ function navTabs(isOwner) {
 
 function Header({ role, isOwner, onLogout }) {
   const navigate = useNavigate();
-  const tabs = navTabs(isOwner);
+  const { t } = useT();
+  const tabs = navTabs(isOwner, t);
 
   return (
     /* Opaque, and the top of the stack. It was `bg-ink-900/60`, so anything
        scrolling underneath — the month nav, the partial-month banner — showed
        through the bar and read as two things overlapping. z-30 keeps it above
        every card and above the bottom tab bar. */
-    <header className="border-b border-ink-800 bg-ink-950 sticky top-0 z-30">
+    // `no-print`: the bar carries sign-out, the language switch and the tabs —
+    // all of them controls, none of them meaningful on a printed statement.
+    <header className="no-print border-b border-ink-800 bg-ink-950 sticky top-0 z-30">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4 sm:gap-6">
         <button
           onClick={() => navigate('/')}
@@ -213,19 +237,23 @@ function Header({ role, isOwner, onLogout }) {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Before the name, not after: the switch is the one control here that
+              a driver who cannot read the rest of the header still has to find. */}
+          <LanguageToggle />
           {/* Who is signed in. For the driver that is his name rather than his
               job title — it is the one place on his screens a name belongs,
               because it answers "whose phone is this logged into", not "how is
               Chandima doing". Truncated rather than allowed to push the sign-out
               button off a 380px header. */}
           <span className="text-xs px-2 py-1 rounded bg-ink-800 text-slate-300 max-w-[9rem] truncate">
-            {role}
+            {/* A driver's own name is not a translatable string; a role is. */}
+            {role === 'driver' || role === 'owner' ? t(`role.${role}`) : role}
           </span>
           <button
             onClick={onLogout}
             className="text-sm text-slate-400 hover:text-slate-200 whitespace-nowrap"
           >
-            Sign out
+            {t('header.signOut')}
           </button>
         </div>
       </div>

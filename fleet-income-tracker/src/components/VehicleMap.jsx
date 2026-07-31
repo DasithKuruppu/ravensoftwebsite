@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { api } from '../api.js';
 import { nearest, rateNow, bandAt, TOU_BANDS, HOME_TOU } from '../../shared/chargers.mjs';
 import { amount, ago } from '../format.js';
+import { useT } from '../i18n/index.jsx';
 
 /**
  * Vehicle position plus the nearest CCS2 chargers.
@@ -20,6 +21,7 @@ const DEFAULT_LIMIT = 3;
 const LIMIT_STEPS = [3, 5, 10, 25];
 
 export default function VehicleMap() {
+  const { t, locale } = useT();
   const [loc, setLoc] = useState(null);
   const [chargers, setChargers] = useState([]);
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
@@ -79,9 +81,9 @@ export default function VehicleMap() {
 
     L.marker([loc.lat, loc.lng], { icon: pin('#4ade80', '🚗'), zIndexOffset: 1000 })
       .bindPopup(
-        `<b>${escapeHtml(loc.plate || 'Vehicle')}</b>` +
-          `<br>${escapeHtml(statusText(loc))}` +
-          `<br>${mapsLink(placeUrl(loc.lat, loc.lng), 'View on Google Maps')}`,
+        `<b>${escapeHtml(loc.plate || t('map.popup.vehicle'))}</b>` +
+          `<br>${escapeHtml(statusText(loc, t))}` +
+          `<br>${mapsLink(placeUrl(loc.lat, loc.lng), t('map.popup.viewMaps'))}`,
       )
       .addTo(layerRef.current);
 
@@ -99,18 +101,26 @@ export default function VehicleMap() {
       })
         .bindPopup(
           `<b>${escapeHtml(c.name)}</b><br>${escapeHtml(c.address || '')}` +
-            `<br>${c.distanceKm} km away` +
-            (rate ? `<br><b>LKR ${rate}/kWh</b> (${TOU_BANDS[band].label.toLowerCase()})` : '<br>rate unknown') +
-            (isCheapest ? '<br><span style="color:#4ade80;font-weight:600">✓ cheapest shown</span>' : '') +
-            (isClosest ? '<br><span style="color:#e2e8f0;font-weight:600">✓ closest</span>' : '') +
-            (c.app ? `<br>App: ${escapeHtml(c.app)}` : '') +
+            `<br>${escapeHtml(t('map.popup.away', { km: c.distanceKm }))}` +
+            (rate
+              ? `<br><b>${escapeHtml(t('unit.perKwh'))} ${rate}</b> (${escapeHtml(bandLabel(band, t))})`
+              : `<br>${escapeHtml(t('map.rateUnknown'))}`) +
+            (isCheapest
+              ? `<br><span style="color:#4ade80;font-weight:600">${escapeHtml(t('map.popup.cheapest'))}</span>`
+              : '') +
+            (isClosest
+              ? `<br><span style="color:#e2e8f0;font-weight:600">${escapeHtml(t('map.popup.closest'))}</span>`
+              : '') +
+            (c.app ? `<br>${escapeHtml(t('map.popup.app', { name: c.app }))}` : '') +
             (c.ccs2 === 'confirmed'
-              ? `<br><span style="color:#4ade80">CCS2 confirmed</span>${c.source ? ` · ${escapeHtml(c.source)}` : ''}`
-              : '<br><span style="color:#fbbf24">CCS2 NOT confirmed — check before relying on it</span>') +
-            (c.position === 'approx' ? '<br><span style="color:#64748b">approximate location</span>' : '') +
+              ? `<br><span style="color:#4ade80">${escapeHtml(t('map.popup.ccs2ok'))}</span>${c.source ? ` · ${escapeHtml(c.source)}` : ''}`
+              : `<br><span style="color:#fbbf24">${escapeHtml(t('map.popup.ccs2no'))}</span>`) +
+            (c.position === 'approx'
+              ? `<br><span style="color:#64748b">${escapeHtml(t('map.popup.approx'))}</span>`
+              : '') +
             // Directions rather than a plain pin: the point of tapping a
             // charger is to drive to it.
-            `<br>${mapsLink(directionsUrl(c.lat, c.lng), 'Directions in Google Maps')}`,
+            `<br>${mapsLink(directionsUrl(c.lat, c.lng), t('map.popup.directions'))}`,
         )
         .addTo(layerRef.current);
     }
@@ -121,17 +131,30 @@ export default function VehicleMap() {
 
     // The container is sized by CSS after mount; Leaflet needs telling.
     setTimeout(() => map.invalidateSize(), 0);
-  }, [loc, near, band, cheapest, closest]);
+    // `locale` is in here because the popups above are built as HTML strings
+    // when the effect runs: without it, switching language leaves every popup in
+    // the language the map was first painted in.
+  }, [loc, near, band, cheapest, closest, locale]);
 
   useEffect(() => () => mapRef.current?.remove(), []);
 
-  if (error) return <Card><p className="text-sm text-slate-400">Location unavailable — {error}</p></Card>;
-  if (!loc) return <Card><p className="text-sm text-slate-400">Locating vehicle…</p></Card>;
+  if (error)
+    return (
+      <Card>
+        <p className="text-sm text-slate-400">{t('map.error', { error })}</p>
+      </Card>
+    );
+  if (!loc)
+    return (
+      <Card>
+        <p className="text-sm text-slate-400">{t('map.locating')}</p>
+      </Card>
+    );
   if (!loc.available) {
     return (
       <Card>
         <p className="text-sm text-slate-400">
-          No position from the tracker{loc.reason ? ` — ${loc.reason}` : '.'}
+          {t('map.noPosition', { reason: loc.reason ? ` — ${loc.reason}` : '.' })}
         </p>
       </Card>
     );
@@ -141,12 +164,15 @@ export default function VehicleMap() {
     <Card>
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
         <h2 className="label">
-          Vehicle &amp; charging{loc.plate ? ` · ${loc.plate}` : ''}
+          {t('map.heading')}
+          {loc.plate ? ` · ${loc.plate}` : ''}
         </h2>
         <span className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
           <Status loc={loc} />
           <span>
-            updated <Ago iso={loc.fixedAt} ageSeconds={loc.fixAgeSeconds} />
+            {/* One string with the age in it: "updated 3 h ago" puts the verb
+                first in English and last in Sinhala. */}
+            <Updated iso={loc.fixedAt} ageSeconds={loc.fixAgeSeconds} />
           </span>
         </span>
       </div>
@@ -160,19 +186,26 @@ export default function VehicleMap() {
 
       <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
         <span className="text-xs text-slate-400">
-          Nearest <span className="num text-slate-300">{near.length}</span> CCS2 chargers ·
-          now on <span className="text-slate-300">{TOU_BANDS[band].label.toLowerCase()}</span> rate
-          ({TOU_BANDS[band].from}–{TOU_BANDS[band].to})
+          {t('map.nearest', {
+            count: near.length,
+            band: bandLabel(band, t),
+            from: TOU_BANDS[band].from,
+            to: TOU_BANDS[band].to,
+          })}
         </span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setConfirmedOnly((v) => !v)}
             className={`btn text-xs px-2 py-1 mr-2 ${confirmedOnly ? 'border-slate-400 text-slate-50' : ''}`}
-            title={confirmedOnly ? `${hiddenCount} station(s) hidden where CCS2 is unconfirmed` : 'Showing stations where CCS2 is not confirmed'}
+            title={
+              confirmedOnly
+                ? t('map.hiddenTitle', { count: hiddenCount })
+                : t('map.showingUnconfirmed')
+            }
           >
-            {confirmedOnly ? 'CCS2 confirmed only' : 'including unconfirmed'}
+            {t(confirmedOnly ? 'map.confirmedOnly' : 'map.includingUnconfirmed')}
           </button>
-          <span className="text-xs text-slate-400 mr-1">show</span>
+          <span className="text-xs text-slate-400 mr-1">{t('map.show')}</span>
           {LIMIT_STEPS.map((n) => (
             <button
               key={n}
@@ -188,11 +221,11 @@ export default function VehicleMap() {
       {(closest || cheapest) && (
         <div className="grid sm:grid-cols-2 gap-3 mt-3">
           <Pick
-            title={sameSite ? 'Closest — and cheapest' : 'Closest'}
+            title={t(sameSite ? 'map.closestAndCheapest' : 'map.closest')}
             tone={sameSite ? 'accent' : 'slate'}
             charger={closest}
           />
-          {!sameSite && <Pick title="Cheapest" tone="accent" charger={cheapest} />}
+          {!sameSite && <Pick title={t('map.cheapest')} tone="accent" charger={cheapest} />}
         </div>
       )}
 
@@ -208,27 +241,27 @@ export default function VehicleMap() {
                     {c.ccs2 !== 'confirmed' && (
                       <span
                         className="text-[11px] uppercase text-warn border border-warn/40 bg-warn/10 rounded px-1"
-                        title="A charger exists here, but nobody has confirmed a CCS2 gun. Check before relying on it."
+                        title={t('map.ccs2NotSureTitle')}
                       >
-                        CCS2 not sure
+                        {t('map.ccs2NotSure')}
                       </span>
                     )}
                     {cheapest && c.id === cheapest.id && (
                       <span className="text-[11px] text-slate-100 border border-slate-500 bg-slate-400/10 rounded px-1">
-                        cheapest
+                        {t('map.cheapestTag')}
                       </span>
                     )}
                     {c.position === 'approx' && (
                       <span
                         className="text-[11px] uppercase text-slate-400 border border-ink-700 rounded px-1"
-                        title="Charger confirmed at this branch, but the pin is the locality — can be ~1 km out"
+                        title={t('map.approxTitle')}
                       >
-                        approx location
+                        {t('map.approx')}
                       </span>
                     )}
                   </div>
                   <div className="text-xs text-slate-400">
-                    <span className="num">{c.distanceKm}</span> km
+                    <span className="num">{c.distanceKm}</span> {t('unit.km')}
                     {c.address ? ` · ${c.address}` : ''}
                     {c.app ? ` · ${c.app}` : ''}
                   </div>
@@ -242,16 +275,16 @@ export default function VehicleMap() {
                     <div className="num text-sm font-semibold leading-tight">
                       {rate ? amount(rate) : '—'}
                     </div>
-                    <div className="text-[11px] opacity-70 leading-tight">LKR/kWh</div>
+                    <div className="text-[11px] opacity-70 leading-tight">{t('unit.perKwh')}</div>
                   </div>
                   <a
                     href={directionsUrl(c.lat, c.lng)}
                     target="_blank"
                     rel="noreferrer"
                     className="btn text-xs px-2 py-1"
-                    title={`Directions to ${c.name}`}
+                    title={t('map.directionsTo', { name: c.name })}
                   >
-                    Directions
+                    {t('map.directions')}
                   </a>
                 </div>
               </li>
@@ -260,10 +293,12 @@ export default function VehicleMap() {
         </ul>
       )}
 
-      <p className="text-xs text-slate-400 mt-3">
-        Home charging on a D-TOU meter is{' '}
-        <span className="num text-slate-400">LKR {HOME_TOU.offPeak}/kWh</span> off-peak
-        ({TOU_BANDS.offPeak.from}–{TOU_BANDS.offPeak.to}) — cheaper than any public DC rate here.
+      <p className="text-xs text-slate-400 mt-3 leading-relaxed">
+        {t('map.homeNote', {
+          rate: `${t('unit.perKwh')} ${HOME_TOU.offPeak}`,
+          from: TOU_BANDS.offPeak.from,
+          to: TOU_BANDS.offPeak.to,
+        })}
       </p>
     </Card>
   );
@@ -275,6 +310,7 @@ export default function VehicleMap() {
  * exactly the decision this is meant to inform.
  */
 function Pick({ title, tone, charger }) {
+  const { t } = useT();
   if (!charger) return null;
   const rate = rateNow(charger);
   const accent = tone === 'accent';
@@ -286,14 +322,16 @@ function Pick({ title, tone, charger }) {
     >
       <div className="flex items-baseline justify-between gap-2">
         <span className={`label ${accent ? 'text-slate-100' : 'text-slate-400'}`}>{title}</span>
-        <span className="num text-xs text-slate-400">{charger.distanceKm} km</span>
+        <span className="num text-xs text-slate-400">
+          {charger.distanceKm} {t('unit.km')}
+        </span>
       </div>
       <div className="text-sm text-slate-200 mt-1 truncate" title={charger.name}>
         {charger.name}
       </div>
       <div className="flex items-end justify-between gap-2 mt-0.5">
         <div className={`num text-lg ${rate ? rateClass(rate) : 'text-slate-400'}`}>
-          {rate ? `LKR ${amount(rate)}` : 'rate unknown'}
+          {rate ? `${t('unit.currency')} ${amount(rate)}` : t('map.rateUnknown')}
           {rate && <span className="text-xs text-slate-400"> /kWh</span>}
         </div>
         {/* The point of surfacing a station is to go to it, so the action sits
@@ -305,9 +343,9 @@ function Pick({ title, tone, charger }) {
           className={`btn text-xs px-2 py-1 shrink-0 ${
             accent ? 'btn-primary' : ''
           }`}
-          title={`Directions to ${charger.name}`}
+          title={t('map.directionsTo', { name: charger.name })}
         >
-          Directions
+          {t('map.directions')}
         </a>
       </div>
     </div>
@@ -377,34 +415,47 @@ function escapeHtml(s) {
  * "repaired" to anyone who does not know that, so the UI says "updated".
  */
 function Status({ loc }) {
+  const { t } = useT();
   const { status, speedKmh, movedM } = loc;
 
   if (status === 'offline') {
-    return <Chip tone="warn">offline</Chip>;
+    return <Chip tone="warn">{t('map.status.offline')}</Chip>;
   }
   if (status === 'moving') {
     return (
       <Chip tone="accent">
-        moving{speedKmh != null ? ` · ${speedKmh} km/h` : movedM != null ? ` · ${movedM} m` : ''}
+        {t('map.status.moving')}
+        {speedKmh != null
+          ? ` · ${speedKmh} ${t('unit.kmh')}`
+          : movedM != null
+            ? ` · ${movedM} m`
+            : ''}
       </Chip>
     );
   }
-  if (status === 'parked') return <Chip tone="slate">parked</Chip>;
+  if (status === 'parked') return <Chip tone="slate">{t('map.status.parked')}</Chip>;
   return (
-    <Chip
-      tone="slate"
-      title="Only one reading so far — whether the car is moving is known once a second one arrives"
-    >
-      movement unknown
+    <Chip tone="slate" title={t('map.status.unknownTitle')}>
+      {t('map.status.unknown')}
     </Chip>
   );
 }
 
-function statusText(loc) {
-  if (loc.status === 'offline') return 'offline';
-  if (loc.status === 'moving') return loc.speedKmh != null ? `moving · ${loc.speedKmh} km/h` : 'moving';
-  if (loc.status === 'parked') return 'parked';
-  return 'movement unknown';
+/** The same, flattened for a Leaflet popup, which takes HTML and not elements. */
+function statusText(loc, t) {
+  if (loc.status === 'offline') return t('map.status.offline');
+  if (loc.status === 'moving')
+    return loc.speedKmh != null
+      ? `${t('map.status.moving')} · ${loc.speedKmh} ${t('unit.kmh')}`
+      : t('map.status.moving');
+  if (loc.status === 'parked') return t('map.status.parked');
+  return t('map.status.unknown');
+}
+
+/** "off-peak" / "ඕෆ්-පීක්" — the tariff band's name, from the dictionary rather
+    than from `TOU_BANDS`, whose labels are English data shared with the API. */
+function bandLabel(band, t) {
+  return t(`tou.${band}`);
 }
 
 function Chip({ tone, children, title }) {
@@ -425,9 +476,14 @@ function Chip({ tone, children, title }) {
  * clock — comparing our clock to the portal's timestamp assumes we agree on its
  * timezone, and we did not: it stamps +05:00, not Colombo's +05:30.
  */
-function Ago({ iso, ageSeconds }) {
+function Updated({ iso, ageSeconds }) {
+  const { t } = useT();
   const { text, minutes } = ago(iso, ageSeconds);
-  return <span className={minutes > 30 ? 'text-warn' : 'text-slate-400'}>{text}</span>;
+  return (
+    <span className={minutes > 30 ? 'text-warn' : 'text-slate-400'}>
+      {t('map.updated', { ago: text })}
+    </span>
+  );
 }
 
 function Card({ children }) {

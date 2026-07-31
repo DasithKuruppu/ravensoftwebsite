@@ -6,6 +6,7 @@ import CsvImport from '../components/CsvImport.jsx';
 import Spinner, { Refreshing } from '../components/Spinner.jsx';
 import DaysOff from '../components/DaysOff.jsx';
 import ChargeLog from '../components/ChargeLog.jsx';
+import ChargingImport from '../components/ChargingImport.jsx';
 
 const EMPTY = { date: '', revenue: '', trips: '', uberKm: '', gpsKm: '', cashCollected: '' };
 
@@ -114,6 +115,13 @@ export default function DailyLog({ month, setMonth, isOwner }) {
 
       <div className="mt-5">
         <ChargeLog entries={entries} onSaved={() => load({ silent: true })} />
+      </div>
+
+      {/* Directly under the log it fills. Typing a month of fast charges by hand
+          is why that log sits half empty, and a half-empty log makes the cost
+          card quote the configured rate as though it had been measured. */}
+      <div className="mt-5">
+        <ChargingImport onImported={() => load({ silent: true })} />
       </div>
 
       <div className={`grid gap-5 mt-5 ${isOwner ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>

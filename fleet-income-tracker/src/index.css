@@ -88,3 +88,50 @@
 .fleet-map .leaflet-bar a:hover {
   background: #1b2029;
 }
+
+/*
+ * Printing a payslip.
+ *
+ * The app is dark by design; paper is not. Printed as-is it would burn a
+ * cartridge on a black background and render the figures in near-white on it, so
+ * the payslip switches to ink-on-paper for print only — and drops the chrome,
+ * since a nav bar has no meaning in a document somebody files.
+ */
+@media print {
+  /* Chrome, in every form it takes: the top bar with sign-out and the language
+     switch, the bottom tab bar, and the print button itself. A control has no
+     meaning on paper, and sign-out on a document somebody files is noise at
+     best. Belt and braces — the class is on each of them, and the element
+     selectors catch anything added later without one. */
+  /* Chrome, in every form it takes: the top bar with sign-out and the language
+     switch, the bottom tab bar, and the print button itself.
+
+     Scoped by class, NOT by element. The statement's own title block is a
+     `<header>` too, so a blanket `header` rule would take the document's heading
+     with the app's. `nav` is safe — the statement has none — and catches any tab
+     bar added later without the class. */
+  .no-print,
+  nav {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .payslip .print-plain {
+    background: #fff !important;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+  .payslip * {
+    color: #111 !important;
+    border-color: #bbb !important;
+  }
+  /* The two figures that matter keep their emphasis through weight, since
+     colour is gone. */
+  .payslip .text-accent,
+  .payslip .text-warn {
+    font-weight: 700 !important;
+  }
+}

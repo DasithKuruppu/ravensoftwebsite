@@ -19,9 +19,32 @@ export default {
         warn: '#fbbf24',
         danger: '#f87171',
       },
+      /* Inter and the monospace faces carry no Sinhala glyphs, so both stacks
+         fall through to whatever Sinhala font the device has: Noto Sans Sinhala
+         on Android and modern Linux, Nirmala UI on Windows, and the system
+         fallback on iOS. No webfont is shipped — a Sinhala face is upwards of
+         200 KB, and this is a page a driver opens on mobile data.
+         The Sinhala fallback sits on the mono stack too: the `num` class is on
+         several hint lines that carry words as well as figures. */
       fontFamily: {
-        mono: ['ui-monospace', 'SFMono-Regular', 'JetBrains Mono', 'Menlo', 'Consolas', 'monospace'],
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: [
+          'ui-monospace',
+          'SFMono-Regular',
+          'JetBrains Mono',
+          'Menlo',
+          'Consolas',
+          'Noto Sans Sinhala',
+          'Nirmala UI',
+          'monospace',
+        ],
+        sans: [
+          'Inter',
+          'ui-sans-serif',
+          'system-ui',
+          'Noto Sans Sinhala',
+          'Nirmala UI',
+          'sans-serif',
+        ],
       },
     },
   },

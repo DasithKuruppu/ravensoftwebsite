@@ -1,11 +1,25 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api.js';
-import { money, amount, count, monthLabel, dayLabel, todayLocal, rate as rateOf } from '../format.js';
+import {
+  money,
+  amount,
+  count,
+  monthLabel,
+  monthName,
+  dayLabel,
+  dateLabel,
+  todayLocal,
+  rate as rateOf,
+} from '../format.js';
+import { useT } from '../i18n/index.jsx';
 import {
   dailyTarget,
   targetProgress,
   workingDaysLeft,
   tripsPerDay,
+  averageDays,
+  offDaysCost,
   bestRecordedDay,
   goalRungs,
   chargingForDay,
@@ -43,6 +57,7 @@ import VehicleMap from '../components/VehicleMap.jsx';
  * is something outstanding, revenue and headings stay neutral.
  */
 export default function DriverDashboard({ summary, month, setMonth, onRefresh }) {
+  const { t } = useT();
   const target = dailyTarget(summary);
   const progress = targetProgress(summary);
   const daysLeft = workingDaysLeft(summary);
@@ -71,9 +86,13 @@ export default function DriverDashboard({ summary, month, setMonth, onRefresh })
         variant="driver"
         revenue={summary.revenue}
         projected={summary.projectedRevenue}
+        // His own goal, prorated for the month, so the chart shows the line he
+        // chose alongside the two the plan sets. Absent when no goal is set.
+        goal={progress?.goalRevenue}
         bandStart={summary.plan.bandStart}
         bandEnd={summary.plan.bandEnd}
-        operatingDays={summary.operatingDays}
+        bandRate={summary.push?.bandRate}
+        topRate={summary.push?.topRate}
       />
 
       {/* The supporting stats, two by two on a phone. They sit BELOW the hero and
@@ -86,21 +105,27 @@ export default function DriverDashboard({ summary, month, setMonth, onRefresh })
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <NextZone summary={summary} />
         <Stat
-          label="Revenue this month"
+          label={t('stat.revenueMonth')}
           value={money(summary.revenue)}
-          sub={`${count(summary.trips)} trips`}
+          sub={t('stat.trips', { count: count(summary.trips) })}
         />
-        {/* The month to date, over the days that earned. Deliberately labelled
-            against its denominator, because the goal block carries a rolling
-            average over the last few days and the two are different questions:
-            this one is the month's record, that one is current form. */}
+        {/* The month to date, over complete shifts with days off taken out —
+            `averageDays`, the same denominator the server divided by. Labelled
+            against it, because the goal block carries a rolling average over the
+            last few days and the two are different questions: this one is the
+            month's record, that one is current form. */}
         <Stat
-          label="Average a day"
+          label={t('stat.averageDay')}
           value={money(summary.dailyAverage)}
           sub={
             tripsPerDay(summary)
-              ? `over ${count(summary.earningDays)} days · ${tripsPerDay(summary)} trips a day`
-              : `over ${count(summary.earningDays)} day${summary.earningDays === 1 ? '' : 's'}`
+              ? t('stat.average.withTrips', {
+                  days: count(averageDays(summary)),
+                  trips: tripsPerDay(summary),
+                })
+              : t('stat.average.days', {
+                  count: averageDays(summary),
+                })
           }
         />
         <Yesterday summary={summary} />
@@ -108,17 +133,10 @@ export default function DriverDashboard({ summary, month, setMonth, onRefresh })
         {/* Called days, counted as shifts. A booked day off is not a day he can
             earn on, so it is out of this count — and out of the goal block's
             denominator and the hero's pace, which read the same function. The
-            subtext says how many were taken out, because a bare number here read
-            as calendar days to month end. */}
-        <Stat
-          label="Days left"
-          value={count(daysLeft)}
-          sub={
-            summary.offDaysAhead > 0
-              ? `+ ${count(summary.offDaysAhead)} day${summary.offDaysAhead === 1 ? '' : 's'} off booked`
-              : 'no days off booked'
-          }
-        />
+            subtext says the count is shifts, because a bare number here read as
+            calendar days to month end; the days themselves are their own tile. */}
+        <Stat label={t('stat.daysLeft')} value={count(daysLeft)} sub={t('stat.daysLeftHint')} />
+        <OffDays summary={summary} />
       </div>
 
       {/* Yesterday's charging. It belongs to the card above it and is written to
@@ -140,6 +158,16 @@ export default function DriverDashboard({ summary, month, setMonth, onRefresh })
       <DriverCostsTeaser summary={summary} onOpen={() => setOpenPanel('costs')} />
 
       <Details summary={summary} month={month} open={openPanel} setOpen={setOpenPanel} />
+
+      {/* The pay document, last on the screen. It is something he fetches at
+          month end rather than a figure he reads daily, so it sits below
+          everything he came for and takes no room until he wants it. */}
+      <Link
+        to="/payslip"
+        className="block text-center text-sm text-slate-300 underline underline-offset-2 py-2"
+      >
+        {t('payslip.link')}
+      </Link>
     </div>
   );
 }
@@ -149,6 +177,7 @@ export default function DriverDashboard({ summary, month, setMonth, onRefresh })
  * screen, with a single line saying what it buys him.
  */
 function Hero({ target }) {
+  const { t, tx } = useT();
   if (!target) return null;
   const settled = target.kind === 'done';
   return (
@@ -157,7 +186,7 @@ function Hero({ target }) {
         target.celebratory ? 'border-accent/40 bg-accent/[0.06]' : 'border-ink-700 bg-ink-900'
       }`}
     >
-      <div className="label">{settled ? 'Your pay this month' : 'Goal today'}</div>
+      <div className="label">{t(settled ? 'hero.label.pay' : 'hero.label.goal')}</div>
       <div
         className={`num mt-1 leading-none tracking-tight text-[2.6rem] sm:text-6xl ${
           settled ? 'text-accent' : 'text-slate-50'
@@ -165,7 +194,26 @@ function Hero({ target }) {
       >
         {money(target.amount)}
       </div>
-      <p className="text-sm text-slate-300 mt-2.5">{target.context}</p>
+      {/* The goal the ask divides toward, named in the line that promises it.
+          Both figures are revenue, so the arithmetic is visible: today's ask,
+          times the days left, is the distance to this number — and the pay
+          beside it is what the revenue is actually for. */}
+      <p className="text-sm text-slate-300 mt-2.5 leading-relaxed">
+        {target.goal
+          ? tx(target.contextKey, {
+              // `count` selects the plural form and is never printed; `days`
+              // is the one the sentence shows. Plain numbers, not styled spans:
+              // a day count is not one of the money figures the eye stops on.
+              count: target.daysLeft,
+              days: target.daysLeft,
+              // The headline figure again, inside the sentence that explains it.
+              ask: <span className="num text-slate-100">{money(target.amount)}</span>,
+              pct: target.pct,
+              goal: <span className="num text-slate-100">{money(target.goal)}</span>,
+              pay: <span className="num text-accent">{money(target.pay)}</span>,
+            })
+          : t(target.contextKey)}
+      </p>
       {/* The pace that is NOT binding, in small type. It is the reason the
           headline can be trusted: the screen has already worked out which of the
           two asks is the harder one, and says what the other one was. */}
@@ -175,7 +223,7 @@ function Hero({ target }) {
             <span className="num text-slate-300">{amount(target.secondary.amount)}</span>
           )}
           {target.secondary.amount !== null ? ' ' : ''}
-          {target.secondary.text}
+          {t(target.secondary.textKey, { pct: target.secondary.pct })}
         </p>
       )}
     </section>
@@ -190,25 +238,30 @@ function Hero({ target }) {
  * figure as the ladder axis and the hero's small print.
  */
 function NextZone({ summary }) {
+  const { t } = useT();
   const zone = nextZone(summary);
   if (!zone) {
     // Nothing left to unlock: say what he is on.
     return (
       <Stat
-        label="Your rate now"
+        label={t('stat.rateNow')}
         value={`${Math.round((summary.push?.topRate || 0.5) * 100)}%`}
-        sub="of every rupee from here"
+        sub={t('stat.rateNowSub')}
       />
     );
   }
   const pct = Math.round(zone.rate * 100);
   return (
     <Stat
-      label={`To your ${pct}% zone`}
+      label={t('stat.toZone', { pct })}
       value={money(zone.remaining)}
       // The band has a ceiling — past it the rate steps up again — so say what the
       // 30% actually applies to rather than implying it runs forever.
-      sub={zone.width ? `then ${pct}% of the next ${amount(zone.width)}` : `then ${pct}% of every rupee`}
+      sub={
+        zone.width
+          ? t('stat.thenPctOfNext', { pct, amount: amount(zone.width) })
+          : t('stat.thenPctOfEvery', { pct })
+      }
     />
   );
 }
@@ -222,13 +275,14 @@ function NextZone({ summary }) {
  * earning it.
  */
 function Yesterday({ summary }) {
+  const { t } = useT();
   const y = summary.yesterday;
   if (y && !y.offDay && (y.revenue > 0 || y.trips)) {
     return (
       <Stat
-        label="Yesterday"
+        label={t('stat.yesterday')}
         value={money(y.revenue)}
-        sub={y.trips ? `${count(y.trips)} trips` : 'no trips logged'}
+        sub={y.trips ? t('stat.trips', { count: count(y.trips) }) : t('stat.noTrips')}
       />
     );
   }
@@ -241,16 +295,19 @@ function Yesterday({ summary }) {
   if (last) {
     return (
       <Stat
-        label="Last logged day"
+        label={t('stat.lastLoggedDay')}
         value={money(last.revenue)}
-        sub={[dayLabel(last.date), last.trips ? `${count(last.trips)} trips` : null]
+        sub={[dayLabel(last.date), last.trips ? t('stat.trips', { count: count(last.trips) }) : null]
           .filter(Boolean)
           .join(' · ')}
       />
     );
   }
-  if (y?.offDay) return <Stat label="Yesterday" value="Day off" sub="rested" />;
-  return <Stat label="Yesterday" value="Nothing yet" sub="your first day shows here" />;
+  if (y?.offDay)
+    return <Stat label={t('stat.yesterday')} value={t('stat.dayOff')} sub={t('stat.rested')} />;
+  return (
+    <Stat label={t('stat.yesterday')} value={t('stat.nothingYet')} sub={t('stat.firstDayHint')} />
+  );
 }
 
 /**
@@ -266,18 +323,57 @@ function Yesterday({ summary }) {
  * the screen that is pure good news, and it is the most recent thing he did.
  */
 function BestDay({ summary }) {
+  const { t } = useT();
   const best = bestRecordedDay(summary);
-  if (!best) return <Stat label="Best day" value="Nothing yet" sub="your first day shows here" />;
+  if (!best)
+    return <Stat label={t('stat.bestDay')} value={t('stat.nothingYet')} sub={t('stat.firstDayHint')} />;
 
   const fresh = isRecent(best.date, summary.month);
   return (
     <Stat
-      label={best.source === 'lastMonth' ? 'Best day last month' : 'Best day this month'}
+      label={t(best.source === 'lastMonth' ? 'stat.bestLastMonth' : 'stat.bestThisMonth')}
       value={money(best.revenue)}
-      sub={[best.trips ? `${count(best.trips)} trips` : null, dayLabel(best.date)]
+      sub={[best.trips ? t('stat.trips', { count: count(best.trips) }) : null, dayLabel(best.date)]
         .filter(Boolean)
         .join(' · ')}
-      flag={fresh ? '▲ new best' : null}
+      flag={fresh ? t('stat.newBest') : null}
+    />
+  );
+}
+
+/**
+ * Days off, on their own tile.
+ *
+ * It used to be a subtitle under "Days left", which put two different facts on
+ * one card and made the count read as a correction to the number above it. It is
+ * a fact about the month in its own right: what he has already taken, and what is
+ * still booked ahead of him.
+ */
+function OffDays({ summary }) {
+  const { t } = useT();
+  const taken = summary.offDaysElapsed || 0;
+  const ahead = summary.offDaysAhead || 0;
+  const cost = offDaysCost(summary);
+  return (
+    <Stat
+      label={t('stat.offDays')}
+      value={count(taken + ahead)}
+      // What the days still booked will cost, at his own daily average. Not a
+      // discouragement — the card exists so time off does not read as a bad day
+      // — but a booked day is a decision, and this is the figure it turns on.
+      flag={cost === null ? null : t('stat.offDaysCost', { amount: money(cost) })}
+      // Each half only appears when it has something to say: "0 taken · 2 booked"
+      // spends a line on a zero, and a month with neither says so in words.
+      sub={
+        taken + ahead === 0
+          ? t('stat.noDaysOff')
+          : [
+              taken ? t('stat.offDaysTaken', { count: taken }) : null,
+              ahead ? t('stat.offDaysAhead', { count: ahead }) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+      }
     />
   );
 }
@@ -304,13 +400,17 @@ function isRecent(date, month) {
  * job is to say what to earn, and no cost figure may compete with the hero.
  */
 function YesterdayCharging({ summary }) {
+  const { t } = useT();
   const y = summary.yesterday;
   const charge = y ? chargingForDay(summary, y.date) : null;
   if (!charge) return null;
   return (
     <p className="text-[11px] text-slate-400 num px-1">
-      Yesterday's charging {amount(charge.cost)} · {rateOf(charge.perKm)}/km over{' '}
-      {amount(charge.km)} km
+      {t('stat.yesterdayCharging', {
+        cost: amount(charge.cost),
+        rate: rateOf(charge.perKm),
+        km: amount(charge.km),
+      })}
     </p>
   );
 }
@@ -335,13 +435,14 @@ function YesterdayCharging({ summary }) {
  * never shaming, and never arithmetic nobody can act on.
  */
 function TargetBlock({ progress, summary, onSaved }) {
+  const { t } = useT();
   const [editing, setEditing] = useState(false);
   const pace = rollingPace(summary);
 
   if (editing || !progress) {
     return (
       <TargetEditor
-        current={progress?.payStated ?? summary.payTarget ?? null}
+        current={progress?.revenueStated ?? summary.revenueTarget ?? null}
         rungs={goalRungs(summary)}
         lastMonth={summary.lastMonth}
         onCancel={progress ? () => setEditing(false) : null}
@@ -359,17 +460,28 @@ function TargetBlock({ progress, summary, onSaved }) {
           figure he actually set. The rows below open on his pace, which is what
           "this pace pays you" needs in front of it — leaving the heading to
           promise a goal the card did not display until the third row. */}
-      <div className="flex items-baseline gap-x-3 gap-y-1 flex-wrap">
-        <h2 className="label">What you want to earn</h2>
-        <span className="num text-sm text-slate-100">
-          {money(progress.payStated)} <span className="text-slate-400">a month</span>
+      {/* Laid out like the rows beneath it — label left, figure hard right — so
+          the goal lines up in the same column as every figure it is read
+          against. The edit link travels with the heading rather than sitting in
+          that column, where it would be the one thing in the stack that is not
+          money. */}
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
+          {/* Lifted off the shared `.label` microstyle. Every other card heading
+              is a caption over figures the driver only reads; this one names the
+              single thing on the screen he SETS, and at 12px muted grey it read
+              as chrome rather than as the control it introduces. */}
+          <h2 className="text-sm font-semibold text-slate-100">{t('target.heading')}</h2>
+          <button
+            onClick={() => setEditing(true)}
+            className="text-xs text-slate-300 underline underline-offset-2"
+          >
+            {t('target.change')}
+          </button>
+        </div>
+        <span className="num text-base text-slate-100 shrink-0">
+          {money(progress.revenueStated)}
         </span>
-        <button
-          onClick={() => setEditing(true)}
-          className="ml-auto text-xs text-slate-300 underline underline-offset-2"
-        >
-          Change
-        </button>
       </div>
 
       {/* The pace comes first, and "this pace" then has something to point at.
@@ -377,56 +489,84 @@ function TargetBlock({ progress, summary, onSaved }) {
           nor what it was measured against, and read as though it might be
           describing the goal itself.
 
-          Top to bottom it is one argument: what you are doing, what that pays,
-          what you wanted, the difference, and what closing it costs a day. */}
+          Top to bottom it is one argument: what hitting the goal pays, what the
+          current pace pays, the pace itself, the difference, and what closing it
+          costs a day. The prize leads, because it is the reason to read on. */}
       <dl className="mt-3 space-y-2">
+        {/* What the goal pays. Derived from the plan rather than asked for, so
+            it answers the question the revenue figure raises — a goal in revenue
+            is the number he can watch during a shift, and this is the number he
+            actually takes home for hitting it. Conditional in its own hint,
+            because it is the one figure here he has not earned yet. */}
+        <Row
+          label={t('target.goalPays')}
+          hint={t('target.goalPaysHint')}
+          value={money(progress.payWanted)}
+          tone="text-accent"
+        />
+
+        <Row
+          label={t('target.paysYou')}
+          hint={t('target.takeHome')}
+          value={money(progress.payAtPace)}
+          tone="text-accent"
+        />
+
+        {/* The goal in revenue, ONLY when proration makes it a different figure
+            from the one in the heading. In a full month the heading already says
+            it and this row was the same number twice; in the month he starts,
+            the heading carries the goal he set and this carries the share of it
+            that this month can be asked for. */}
+        {progress.prorated && (
+          <Row
+            label={t('target.goalThisMonth')}
+            hint={t('target.proratedHint', { days: count(summary.operatingDays) })}
+            value={money(progress.goalRevenue)}
+          />
+        )}
+
         {pace && (
           <Row
-            label="Your pace"
-            hint={`a day, over your last ${count(pace.shifts)} day${pace.shifts === 1 ? '' : 's'}`}
+            label={t('target.pace')}
+            hint={t('target.paceHint', { count: pace.shifts })}
             value={amount(pace.perShift)}
             trend={pace}
           />
         )}
 
-        <Row
-          label="This pace pays you"
-          hint="take-home, by month end"
-          value={money(progress.payAtPace)}
-          tone="text-accent"
-        />
-
-        <Row
-          label={progress.prorated ? 'Your goal this month' : 'Your goal'}
-          hint={
-            progress.prorated
-              ? `this month's share — scaled to your ${count(summary.operatingDays)} days`
-              : 'take-home, by month end'
-          }
-          value={money(progress.payWanted)}
-        />
-
         {progress.banked ? (
-          <Row label="Goal already banked" value="✓" tone="text-accent" />
+          <Row label={t('target.banked')} value="✓" tone="text-accent" />
         ) : progress.shortfall > 0 ? (
           <>
             <Row
-              label="Short by"
-              hint="in take-home"
+              label={t('target.shortBy')}
+              hint={t('target.inTakeHome')}
               value={money(progress.shortfall)}
               tone="text-warn"
             />
             <Row
-              label="To close it"
-              hint={`a day to drive, over ${count(progress.daysLeft)} day${progress.daysLeft === 1 ? '' : 's'} left`}
+              label={t('target.toClose')}
+              hint={t('target.toCloseHint', { count: progress.daysLeft })}
               value={amount(progress.gapPerDay)}
               tone="text-warn"
             />
+            {/* The same ask, said as a difference. The row above is what a day
+                has to bring; this is how much more that is than the days he is
+                already driving — the figure that decides whether the goal is one
+                more fare or a different month. Absent when the pace covers it. */}
+            {progress.liftPerDay > 0 && (
+              <Row
+                label={t('target.lift')}
+                hint={t('target.liftHint')}
+                value={`+${amount(progress.liftPerDay)}`}
+                tone="text-warn"
+              />
+            )}
           </>
         ) : (
           <Row
-            label="Past your goal by"
-            hint="in take-home"
+            label={t('target.pastGoalBy')}
+            hint={t('target.inTakeHome')}
             value={money(Math.abs(progress.shortfall))}
             tone="text-accent"
           />
@@ -445,6 +585,7 @@ function TargetBlock({ progress, summary, onSaved }) {
  * his own that no rung offers.
  */
 function TargetEditor({ current, rungs, lastMonth, onCancel, onSaved }) {
+  const { t } = useT();
   const [value, setValue] = useState(current ? String(Math.round(current)) : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -465,17 +606,18 @@ function TargetEditor({ current, rungs, lastMonth, onCancel, onSaved }) {
 
   return (
     <form onSubmit={save} className="card">
-      <h2 className="label">What do you want to earn a month?</h2>
-      <p className="text-xs text-slate-400 mt-1">
-        Your own goal — in your pocket, after the plan. Nothing else changes when you move it.
-      </p>
+      <h2 className="label">{t('editor.heading')}</h2>
+      <p className="text-xs text-slate-400 mt-1 leading-relaxed">{t('editor.blurb')}</p>
 
       {rungs.length > 0 && (
         <>
           <p className="text-xs text-slate-400 mt-3">
-            You took home <span className="num text-slate-200">{money(lastMonth.driverPay)}</span> in{' '}
-            {monthLabel(`${lastMonth.month}-01`)}
-            {lastMonth.partial ? ' (a part month)' : ''}.
+            {t('editor.lastMonth', {
+              revenue: money(lastMonth.revenue),
+              pay: money(lastMonth.driverPay),
+              month: monthLabel(`${lastMonth.month}-01`),
+              partial: lastMonth.partial ? t('editor.partMonth') : '',
+            })}
           </p>
           <div className="grid grid-cols-2 gap-2 mt-2">
             {rungs.map((rung) => (
@@ -491,7 +633,7 @@ function TargetEditor({ current, rungs, lastMonth, onCancel, onSaved }) {
                 }`}
               >
                 <span className="num block text-sm text-slate-100">{amount(rung.value)}</span>
-                <span className="block text-[11px] text-slate-400">{rung.label}</span>
+                <span className="block text-[11px] text-slate-400">{t(rung.labelKey)}</span>
               </button>
             ))}
           </div>
@@ -499,7 +641,7 @@ function TargetEditor({ current, rungs, lastMonth, onCancel, onSaved }) {
       )}
 
       <div className="flex items-center gap-2 mt-3">
-        <span className="text-sm text-slate-400">LKR</span>
+        <span className="text-sm text-slate-400">{t('unit.currency')}</span>
         <input
           type="number"
           step="5000"
@@ -514,11 +656,11 @@ function TargetEditor({ current, rungs, lastMonth, onCancel, onSaved }) {
       {error && <p className="text-sm text-danger mt-2">{error}</p>}
       <div className="flex items-center gap-2 mt-3">
         <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? 'Saving…' : 'Save goal'}
+          {busy ? t('editor.saving') : t('editor.save')}
         </button>
         {onCancel && (
           <button type="button" className="btn" onClick={onCancel} disabled={busy}>
-            Cancel
+            {t('editor.cancel')}
           </button>
         )}
       </div>
@@ -535,20 +677,24 @@ function TargetEditor({ current, rungs, lastMonth, onCancel, onSaved }) {
  * that it ends.
  */
 function PartialMonth({ summary }) {
-  const started = summary.startDate ? dayLabel(summary.startDate).replace(/^\w+,\s*/, '') : null;
-  const next = nextMonthName(summary.month);
+  const { t } = useT();
+  const started = summary.startDate ? dateLabel(summary.startDate) : null;
   return (
-    <p className="rounded-lg border border-warn/30 bg-warn/[0.06] px-3.5 py-2.5 text-sm text-slate-200">
-      <span className="text-warn font-medium">Partial month</span>
-      {started ? ` — started ${started}.` : '.'} Targets scaled to your{' '}
-      <span className="num">{count(summary.operatingDays)}</span> days. Full plan from {next}.
+    <p className="rounded-lg border border-warn/30 bg-warn/[0.06] px-3.5 py-2.5 text-sm text-slate-200 leading-relaxed">
+      <span className="text-warn font-medium">{t('partial.tag')}</span>
+      {started ? t('partial.started', { date: started }) : '.'}
+      {t('partial.scaled', {
+        days: count(summary.operatingDays),
+        next: nextMonthName(summary.month),
+      })}
     </p>
   );
 }
 
 function nextMonthName(month) {
   const [y, m] = month.split('-').map(Number);
-  return new Date(Date.UTC(y, m, 1)).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
+  const d = new Date(Date.UTC(y, m, 1));
+  return monthName(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
 }
 
 /**
@@ -556,14 +702,15 @@ function nextMonthName(month) {
  * closed by default so the main screen stays a five-second read.
  */
 function Details({ summary, month, open, setOpen }) {
+  const { t } = useT();
   // Three panels, and the split is by question rather than by data type: how the
   // pay works, what the driving costs, where the car is. Costs get a tab of their
   // own so a screen about earning is never half about spending — and cash lives
   // on the main screen, because knowing what he is holding is not a detail.
   const panels = [
-    { key: 'pay', label: 'How your pay works' },
-    { key: 'costs', label: 'What it costs' },
-    { key: 'car', label: 'The car' },
+    { key: 'pay', label: t('details.pay') },
+    { key: 'costs', label: t('details.costs') },
+    { key: 'car', label: t('details.car') },
   ];
 
   return (
@@ -621,18 +768,19 @@ function Details({ summary, month, open, setOpen }) {
  * lenses on how it is being earned.
  */
 function Projected({ summary, month }) {
+  const { t } = useT();
   const trips = tripsPerDay(summary);
   return (
     <div className="card">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <h2 className="label">If this pace holds</h2>
+        <h2 className="label">{t('projected.heading')}</h2>
         <span className="text-xs text-slate-400">{monthLabel(`${month}-01`)}</span>
       </div>
       <dl className="mt-3 space-y-2">
-        <Row label="Month-end revenue" value={amount(summary.projectedRevenue)} />
-        {trips && <Row label="Trips a shift" value={String(trips)} />}
+        <Row label={t('projected.monthEnd')} value={amount(summary.projectedRevenue)} />
+        {trips && <Row label={t('projected.tripsShift')} value={String(trips)} />}
         {summary.push?.revenuePerTrip && (
-          <Row label="Revenue a trip" value={amount(summary.push.revenuePerTrip)} />
+          <Row label={t('projected.revenueTrip')} value={amount(summary.push.revenuePerTrip)} />
         )}
       </dl>
     </div>
@@ -667,6 +815,7 @@ function Stat({ label, value, sub, flag, accent = false }) {
 }
 
 function Row({ label, hint, value, tone = 'text-slate-100', trend }) {
+  const { t } = useT();
   return (
     <div className="flex items-baseline justify-between gap-4">
       <dt className="text-sm text-slate-300 min-w-0">
@@ -681,8 +830,8 @@ function Row({ label, hint, value, tone = 'text-slate-100', trend }) {
           <span
             className={`block text-[11px] ${trend.direction === 'up' ? 'text-slate-300' : 'text-warn'}`}
           >
-            {trend.direction === 'up' ? '▲' : '▼'} {amount(Math.abs(trend.delta))} on the{' '}
-            {trend.previousShifts} before
+            {trend.direction === 'up' ? '▲' : '▼'} {amount(Math.abs(trend.delta))}{' '}
+            {t('target.trend', { shifts: trend.previousShifts })}
           </span>
         )}
       </dd>

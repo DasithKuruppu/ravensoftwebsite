@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { api } from '../api.js';
+import { useT, LanguageToggle } from '../i18n/index.jsx';
 
 export default function Login({ onLogin }) {
+  const { t } = useT();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -15,7 +17,7 @@ export default function Login({ onLogin }) {
       const res = await api.login(username, password);
       onLogin(res.token, res.role);
     } catch (err) {
-      setError(err.status === 401 ? 'Wrong username or password.' : err.message);
+      setError(err.status === 401 ? t('login.badCredentials') : err.message);
     } finally {
       setBusy(false);
     }
@@ -24,27 +26,32 @@ export default function Login({ onLogin }) {
   return (
     <div className="min-h-screen grid place-items-center px-4">
       <form onSubmit={submit} className="card w-full max-w-sm space-y-4">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-100">
-            Ravensoft<span className="text-slate-400"> Fleet</span>
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">Driver revenue &amp; commission tracking</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-semibold text-slate-100">
+              Ravensoft<span className="text-slate-400"> Fleet</span>
+            </h1>
+            <p className="text-sm text-slate-400 mt-1">{t('login.tagline')}</p>
+          </div>
+          {/* The switch has to be reachable before sign-in: a driver handed a
+              phone with the app already installed meets this screen first. */}
+          <LanguageToggle className="shrink-0 mt-0.5" />
         </div>
 
         <div className="space-y-3">
           <div className="grid gap-1">
-            <label className="label" htmlFor="username">Username</label>
+            <label className="label" htmlFor="username">{t('login.username')}</label>
             <input
               id="username"
               autoFocus
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="your username"
+              placeholder={t('login.usernamePlaceholder')}
             />
           </div>
           <div className="grid gap-1">
-            <label className="label" htmlFor="password">Password</label>
+            <label className="label" htmlFor="password">{t('login.password')}</label>
             <input
               id="password"
               type="password"
@@ -62,7 +69,7 @@ export default function Login({ onLogin }) {
         )}
 
         <button type="submit" className="btn btn-primary w-full" disabled={busy || !username || !password}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? t('login.signingIn') : t('login.signIn')}
         </button>
       </form>
     </div>

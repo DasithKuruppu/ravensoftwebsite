@@ -27,6 +27,43 @@ beforeEach(() => {
 
 const get = (date) => store.getEntry(DEFAULT_DRIVER, date);
 
+/**
+ * `putEntry` replaces the whole item, so any writer that rebuilds an entry
+ * deletes every column it does not name. These are the columns no CSV describes
+ * and no import owns: the driver marks his own days off and logs his own
+ * charging, and an import over that day used to wipe both.
+ */
+describe('what an import must not destroy', () => {
+  it('keeps a day the driver marked off', async () => {
+    await store.putEntry(DEFAULT_DRIVER, { date: '2026-07-20', revenue: 0, offDay: true });
+    await importRows([{ date: '2026-07-20', revenue: '12000', trips: '9' }]);
+    const day = await get('2026-07-20');
+    expect(day.offDay).toBe(true);
+    // and still takes the figures the CSV did describe
+    expect(day.revenue).toBe(12000);
+    expect(day.trips).toBe(9);
+  });
+
+  it('keeps the charging sessions logged against the day', async () => {
+    await store.putEntry(DEFAULT_DRIVER, {
+      date: '2026-07-20',
+      revenue: 0,
+      chargeSessions: [{ id: 'a', amount: 2400, station: 'Keells Kottawa', kwh: 32 }],
+    });
+    await importRows([{ date: '2026-07-20', revenue: '12000' }]);
+    const day = await get('2026-07-20');
+    expect(day.chargeSessions).toHaveLength(1);
+    expect(day.chargeSessions[0].amount).toBe(2400);
+  });
+
+  it('leaves a normal day alone', async () => {
+    await importRows([{ date: '2026-07-21', revenue: '9000' }]);
+    const day = await get('2026-07-21');
+    expect(day.offDay).toBe(false);
+    expect(day.chargeSessions).toEqual([]);
+  });
+});
+
 describe('importRows', () => {
   it('sums per-trip rows into one entry per date', async () => {
     await importRows([

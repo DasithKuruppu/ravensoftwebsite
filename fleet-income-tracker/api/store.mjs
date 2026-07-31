@@ -360,6 +360,8 @@ function toEntry(item) {
             amount: num(session?.amount),
             station: session?.station ? String(session.station) : '',
             kwh: session?.kwh === undefined || session?.kwh === null ? null : num(session.kwh),
+            // Where it was bought. Null on anything written before the field.
+            type: session?.type === 'fast' || session?.type === 'home' ? session.type : null,
           }))
           .filter((session) => Number.isFinite(session.amount) && session.amount > 0)
       : [],

@@ -29,17 +29,34 @@ export const DEFAULT_SETTINGS = {
    */
   driverName: 'Driver',
   /**
-   * What the driver wants to TAKE HOME in a month, in LKR.
+   * The same name in Sinhala script, for the Sinhala UI.
+   *
+   * Separate from `driverName` rather than replacing it, because that field is
+   * also a sign-in alias (`resolveUsername`) and a Latin keyboard is what a phone
+   * offers at the login screen. Blank means "no Sinhala spelling given" and the
+   * Latin one is used in both languages.
+   */
+  driverNameSi: '',
+  /**
+   * What the driver wants to DRIVE in a month, in LKR of revenue.
    *
    * His figure, not a commercial term, and nothing in the pay calculation reads
-   * it. Stated as earnings rather than revenue because earnings are what he
-   * actually wants — the revenue needed to produce them is arithmetic, and the
-   * display layer derives it by inverting the tier function against whatever
-   * plan applies that month (prorated in the month he starts).
+   * it. Stated as revenue rather than take-home because revenue is what he can
+   * watch himself earning through a shift, and because it is what the screen
+   * divides: the goal and the daily ask are then the same currency and can be
+   * checked against each other. What it pays him is derived from the plan that
+   * applies that month (prorated in the month he starts).
    *
    * Payouts land at the end of each month, so this is a monthly figure.
    */
-  payTarget: 100000,
+  revenueTarget: 350000,
+  /**
+   * The take-home goal `revenueTarget` replaced.
+   *
+   * Kept only so a settings record written before the change still yields a goal
+   * — `display.js` converts it through the plan. Nothing writes it any more.
+   */
+  payTarget: null,
   /**
    * Whether stored `revenue` is the full fare or what was left after a
    * percentage commission.

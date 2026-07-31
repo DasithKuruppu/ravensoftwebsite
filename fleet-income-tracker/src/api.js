@@ -11,6 +11,7 @@ const ROLE_KEY = 'fleet.role';
 // page that never asks for one — the daily log, say, opened directly — still
 // knows who is signed in.
 const NAME_KEY = 'fleet.driverName';
+const NAME_SI_KEY = 'fleet.driverNameSi';
 
 /**
  * localStorage, or nothing.
@@ -37,10 +38,24 @@ export function getDriverName() {
   return store?.getItem(NAME_KEY) || '';
 }
 
-export function rememberDriverName(name) {
+/**
+ * The Sinhala spelling, when the owner has given one.
+ *
+ * Held separately rather than resolved at write time: the language toggle can be
+ * flipped long after the summary that carried the names, and a single cached
+ * string would keep showing whichever language happened to be active when it was
+ * stored.
+ */
+export function getDriverNameSi() {
+  return store?.getItem(NAME_SI_KEY) || '';
+}
+
+export function rememberDriverName(name, nameSi) {
   if (!store) return;
   if (name) store.setItem(NAME_KEY, name);
   else store.removeItem(NAME_KEY);
+  if (nameSi) store.setItem(NAME_SI_KEY, nameSi);
+  else store.removeItem(NAME_SI_KEY);
 }
 
 export function setSession(token, role) {
@@ -55,6 +70,7 @@ export function setSession(token, role) {
     // Signing out forgets who it was, so the next person to sign in on this
     // phone is not greeted by somebody else's name.
     store.removeItem(NAME_KEY);
+    store.removeItem(NAME_SI_KEY);
   }
 }
 
@@ -105,11 +121,13 @@ export const api = {
   // and it is the only cost figure he records.
   saveCharging: (date, sessions) => request('PUT', `/entries/${date}/charging`, { sessions }),
   importRows: (rows) => request('POST', '/entries/import', { rows }),
+  // Charging sessions from the network's export, already grouped by local day.
+  importCharging: (days) => request('POST', '/entries/charging/import', { days }),
   settings: () => request('GET', '/settings'),
   saveSettings: (settings) => request('PUT', '/settings', settings),
   // The driver's own goal. Separate from `saveSettings` because this is the one
   // settings field he is allowed to write.
-  saveTarget: (payTarget) => request('PUT', '/settings/target', { payTarget }),
+  saveTarget: (revenueTarget) => request('PUT', '/settings/target', { revenueTarget }),
   // The handover ledger. The driver logs; the owner confirms. Both read it.
   handovers: () => request('GET', '/handovers'),
   logHandover: (handover) => request('POST', '/handovers', handover),

@@ -6,13 +6,17 @@ import {
   workingDaysLeft,
   workingDaysInMonth,
   tripsPerDay,
+  averageDays,
+  offDaysCost,
+  driverNameIn,
   payAt,
   targetForMonth,
   dailyTarget,
   targetProgress,
   bestRecordedDay,
   revenueForPay,
-  payTargetForMonth,
+  revenueTargetForMonth,
+  payAtTargetForMonth,
   paces,
   goalRungs,
   uberCut,
@@ -27,6 +31,8 @@ import {
   nextZone,
 } from './display.js';
 import { prorate, monthFactor, DEFAULT_SETTINGS } from '../shared/commission.mjs';
+import { generatedAt } from './format.js';
+import { setLocale, resetLocale } from './i18n/i18n.js';
 
 /** A full-month summary on the default plan, with the bits the display uses. */
 function summary(over = {}) {
@@ -46,7 +52,9 @@ function summary(over = {}) {
     offDaysElapsed: 0,
     offDaysAhead: 0,
     prorationFactor: factor,
-    payTarget: 93000,
+    // 350,000 of revenue is what a 93,000 take-home used to be asked for.
+    revenueTarget: 350000,
+    payTarget: null,
     revenueBasis: 'net',
     uberCommissionRate: 0.25,
     bestDay: null,
@@ -149,7 +157,7 @@ describe('perDayThreshold', () => {
       projectedDays: days - elapsed,
       revenue: onPace * elapsed,
         bestDay: { date: '2026-07-25', revenue: 16000 },
-      payTarget: null,
+      revenueTarget: null,
     });
     const hero = dailyTarget(s);
     expect(hero.kind).toBe('tier');
@@ -180,6 +188,105 @@ describe('days', () => {
     expect(tripsPerDay(summary({ trips: 84, earningDays: 9 }))).toBe(9.3);
     expect(tripsPerDay(summary())).toBe(null);
   });
+
+  /**
+   * The stat tile prints the average and its denominator on one card, and they
+   * have to be the same denominator. The server strikes `dailyAverage` over
+   * `paceDays` — complete shifts, days off out — while `earningDays` also counts
+   * a shift still being driven. Reading the money off one and the trips off the
+   * other put two different averages under one label.
+   */
+  it('divides trips by the days the average was struck over', () => {
+    const s = summary({
+      trips: 84,
+      earningDays: 10,
+      paceDays: 9,
+      today: { date: '2026-07-27', revenue: 4200, trips: 6, offDay: false },
+    });
+    expect(averageDays(s)).toBe(9);
+    // Today's 6 trips leave with today's day: 78 over 9 complete shifts.
+    expect(tripsPerDay(s)).toBe(8.7);
+  });
+
+  it('falls back to earning days when the server sends no pace days', () => {
+    const s = summary({ trips: 84, earningDays: 9 });
+    expect(averageDays(s)).toBe(9);
+    // Nothing to subtract: the fallback denominator counts today itself.
+    expect(tripsPerDay(s)).toBe(9.3);
+  });
+
+  it('prices the days off still booked at his own daily average', () => {
+    // Two days booked ahead, 18,360 on an average day.
+    expect(offDaysCost(summary({ offDaysAhead: 2, dailyAverage: 18359.7 }))).toBe(36719);
+    // Days already taken are sunk and already out of the average — pricing them
+    // again would bill him twice for the same time off.
+    expect(offDaysCost(summary({ offDaysElapsed: 3, offDaysAhead: 0, dailyAverage: 18359.7 }))).toBe(null);
+  });
+
+  it('prices nothing when there is no average to price it at', () => {
+    // A first month with no complete day yet: "−0 not earned" would be a claim,
+    // and it would say a day off is free.
+    expect(offDaysCost(summary({ offDaysAhead: 2, dailyAverage: 0 }))).toBe(null);
+  });
+
+  it('keeps a day off out of the trip count it subtracts', () => {
+    const s = summary({
+      trips: 84,
+      earningDays: 10,
+      paceDays: 9,
+      today: { date: '2026-07-27', revenue: 0, trips: null, offDay: true },
+    });
+    expect(tripsPerDay(s)).toBe(9.3);
+  });
+});
+
+describe('the driver\'s name', () => {
+  it('uses the Sinhala spelling only when reading Sinhala', () => {
+    const s = summary({ driverName: 'Chandima', driverNameSi: 'චන්දිම' });
+    expect(driverNameIn(s, 'en')).toBe('Chandima');
+    expect(driverNameIn(s, 'si')).toBe('චන්දිම');
+  });
+
+  /**
+   * A name is not a string to be translated. With no Sinhala spelling given, the
+   * Latin one is shown in both languages rather than transliterated — a guessed
+   * spelling of somebody's name is worse than none.
+   */
+  it('falls back to the Latin name when no Sinhala one is set', () => {
+    const s = summary({ driverName: 'Chandima', driverNameSi: '' });
+    expect(driverNameIn(s, 'si')).toBe('Chandima');
+    const absent = summary({ driverName: 'Chandima' });
+    delete absent.driverNameSi;
+    expect(driverNameIn(absent, 'si')).toBe('Chandima');
+  });
+
+  it('ignores a Sinhala field that is only whitespace', () => {
+    expect(driverNameIn(summary({ driverName: 'Chandima', driverNameSi: '   ' }), 'si')).toBe('Chandima');
+  });
+});
+
+/**
+ * The percentages the copy prints are the plan's, not three literals repeated in
+ * two dictionaries and a chart. A fleet on different terms must not read a
+ * screen that quietly says 50% while paying 40%.
+ */
+describe('rates in the copy follow the plan', () => {
+  const onRates = (bandRate, topRate) => {
+    const s = summary({ revenueTarget: null, revenue: 200000, projectedDays: 8 });
+    s.push = { ...s.push, bandRate, topRate };
+    return s;
+  };
+
+  it('names the top rate the plan actually pays', () => {
+    expect(dailyTarget(onRates(0.3, 0.5)).pct).toBe(50);
+    expect(dailyTarget(onRates(0.25, 0.4)).pct).toBe(40);
+  });
+
+  it('carries the same rate onto the hero\'s secondary line', () => {
+    const s = summary({ revenueTarget: 274000, revenue: 200000, projectedDays: 8 });
+    s.push = { ...s.push, bandRate: 0.25, topRate: 0.4 };
+    expect(dailyTarget(s).secondary.pct).toBe(40);
+  });
 });
 
 describe('payAt', () => {
@@ -207,34 +314,34 @@ describe('dailyTarget', () => {
     expect(t.kind).toBe('goal');
     expect(t.goal).toBe(350000);
     expect(t.amount).toBe(15000);
-    expect(t.context).toMatch(/to reach your goal/);
+    expect(t.contextKey).toBe('hero.context.goal');
   });
 
   it('mentions the tier only when it asks for more than the goal does', () => {
-    // A modest goal — 60,000 take-home, 274,000 of revenue — sits below the top
-    // threshold, so driving only the goal's pace would miss the 50% zone.
-    const s = summary({ payTarget: 60000, revenue: 200000, projectedDays: 8 });
+    // A modest goal — 274,000 of revenue — sits below the top threshold, so
+    // driving only the goal's pace would miss the 50% zone.
+    const s = summary({ revenueTarget: 274000, revenue: 200000, projectedDays: 8 });
     const t = dailyTarget(s);
     expect(t.kind).toBe('goal');
     expect(t.amount).toBe(9250);   // (274,000 − 200,000) / 8
-    expect(t.secondary).toEqual({ amount: 12500, text: 'is what your 50% zone needs' });
+    expect(t.secondary).toEqual({ amount: 12500, textKey: 'hero.secondary.tier', pct: 50 });
 
     // And stays quiet when the goal already covers it.
     expect(dailyTarget(summary({ revenue: 200000, projectedDays: 8 })).secondary).toBe(null);
   });
 
   it('falls back to the top tier when no goal is set', () => {
-    const t = dailyTarget(summary({ payTarget: null, revenue: 260000, projectedDays: 8 }));
+    const t = dailyTarget(summary({ revenueTarget: null, revenue: 260000, projectedDays: 8 }));
     expect(t.kind).toBe('tier');
     expect(t.amount).toBe(5000);   // (300,000 − 260,000) / 8
-    expect(t.context).toMatch(/to reach your 50% zone/);
+    expect(t.contextKey).toBe('hero.context.tierReach');
   });
 
   it('says "stay in" when the projection already clears the tier', () => {
     const t = dailyTarget(
-      summary({ payTarget: null, revenue: 260000, projectedRevenue: 320000, projectedDays: 8 }),
+      summary({ revenueTarget: null, revenue: 260000, projectedRevenue: 320000, projectedDays: 8 }),
     );
-    expect(t.context).toMatch(/to stay in your 50% zone/);
+    expect(t.contextKey).toBe('hero.context.tierStay');
   });
 
   it('celebrates once the goal is banked', () => {
@@ -275,11 +382,35 @@ describe('dailyTarget', () => {
     expect(dailyTarget(s).amount).toBe(14350);
   });
 
-  it('scales the earnings goal to a partial month', () => {
-    const s = summary({ prorationFactor: JULY_FACTOR, revenue: 130000, projectedDays: 4 });
-    expect(payTargetForMonth(s)).toBe(36000);
+  it('scales the revenue goal to a partial month', () => {
+    const s = summary({
+      revenueTarget: 350000,
+      prorationFactor: JULY_FACTOR,
+      revenue: 100000,
+      projectedDays: 4,
+    });
+    // 350,000 x 12/31 = 135,484, rounded up to a figure worth printing.
+    expect(revenueTargetForMonth(s)).toBe(135484);
     expect(targetForMonth(s)).toBe(136000);
     expect(dailyTarget(s).kind).toBe('goal');
+  });
+
+  /**
+   * A record written before the goal became revenue holds only a take-home
+   * figure. Reading it as revenue would cut the goal to roughly a quarter, so it
+   * is converted through the plan instead — landing on the revenue that pays
+   * what he originally asked for.
+   */
+  it('converts a take-home goal saved before the change', () => {
+    const s = summary({ payTarget: 93000, revenue: 100000 });
+    delete s.revenueTarget;
+    expect(targetForMonth(s)).toBe(350000);
+    expect(payAtTargetForMonth(s)).toBeGreaterThanOrEqual(93000);
+  });
+
+  it('prefers the revenue goal once one is set', () => {
+    const s = summary({ payTarget: 93000, revenueTarget: 420000, revenue: 100000 });
+    expect(targetForMonth(s)).toBe(420000);
   });
 });
 
@@ -327,6 +458,28 @@ describe('targetProgress', () => {
     expect(p.shortfall).toBe(30000);
   });
 
+  /**
+   * The absolute ask does not say how hard it is. "12,500 a day" against an
+   * average of 10,000 is one more fare; against 4,000 it is a different month.
+   * The lift is that difference, off the same average the stat row prints.
+   */
+  it('names the lift over the pace he is already holding', () => {
+    const p = targetProgress(
+      summary({ revenue: 100000, projectedRevenue: 283333, projectedDays: 20, dailyAverage: 10000 }),
+    );
+    expect(p.gapPerDay).toBe(12500);
+    expect(p.liftPerDay).toBe(2500);
+  });
+
+  it('asks for no lift when the pace already covers the goal', () => {
+    const p = targetProgress(
+      summary({ revenue: 100000, projectedRevenue: 283333, projectedDays: 20, dailyAverage: 20000 }),
+    );
+    // The pace is ahead of the ask, so there is no increase to name — and a
+    // negative one would read as permission to slow down.
+    expect(p.liftPerDay).toBe(0);
+  });
+
   it('reports being past the goal as a negative shortfall', () => {
     const p = targetProgress(summary({ revenue: 300000, projectedRevenue: 400000, projectedDays: 4 }));
     expect(p.shortfall).toBeLessThan(0);
@@ -353,13 +506,15 @@ describe('targetProgress', () => {
 
   it('scales the goal, not the ambition, in the month he starts', () => {
     const p = targetProgress(summary({ prorationFactor: JULY_FACTOR, operatingDays: 12 }));
-    expect(p.payStated).toBe(93000);
-    expect(p.payWanted).toBe(36000);
+    expect(p.revenueStated).toBe(350000);
+    // 350,000 scaled to twelve of thirty-one days, and what the plan pays on it.
+    expect(p.goalRevenue).toBe(136000);
+    expect(p.payWanted).toBe(payAtTargetForMonth(summary({ prorationFactor: JULY_FACTOR, operatingDays: 12 })));
     expect(p.prorated).toBe(true);
   });
 
   it('is absent when no goal is set', () => {
-    expect(targetProgress(summary({ payTarget: null }))).toBe(null);
+    expect(targetProgress(summary({ revenueTarget: null }))).toBe(null);
   });
 });
 
@@ -382,7 +537,7 @@ describe('paces', () => {
   });
 
   it('has no goal pace when no goal is set', () => {
-    expect(paces(base({ payTarget: null })).goalPace).toBe(null);
+    expect(paces(base({ revenueTarget: null })).goalPace).toBe(null);
   });
 
   it('never asks for a negative amount', () => {
@@ -393,28 +548,29 @@ describe('paces', () => {
 });
 
 describe('goalRungs', () => {
-  it('anchors on last month\'s actual take-home', () => {
-    const rungs = goalRungs(summary({ lastMonth: { month: '2026-06', driverPay: 100000 } }));
-    expect(rungs.map((r) => r.value)).toEqual([100000, 115000, 130000, 150000]);
-    expect(rungs[0].label).toBe('Same again');
+  it("anchors on last month's actual revenue", () => {
+    const rungs = goalRungs(summary({ lastMonth: { month: '2026-06', revenue: 300000 } }));
+    expect(rungs.map((r) => r.value)).toEqual([300000, 345000, 390000, 450000]);
+    expect(rungs[0].labelKey).toBe('rung.same');
   });
 
   it('rounds to clean numbers', () => {
-    const rungs = goalRungs(summary({ lastMonth: { month: '2026-06', driverPay: 57036 } }));
-    // 57,036 / 65,591 / 74,147 / 85,554 → nearest 5,000
-    expect(rungs.map((r) => r.value)).toEqual([55000, 65000, 75000, 85000]);
+    const rungs = goalRungs(summary({ lastMonth: { month: '2026-06', revenue: 257036 } }));
+    // 257,036 / 295,591 / 334,147 / 385,554 → nearest 5,000
+    expect(rungs.map((r) => r.value)).toEqual([255000, 295000, 335000, 385000]);
   });
 
-  it('never suggests less than the base he is paid regardless', () => {
-    const rungs = goalRungs(summary({ lastMonth: { month: '2026-06', driverPay: 20000 } }));
-    // The base is 50,000, so nothing below it is a goal.
-    expect(Math.min(...rungs.map((r) => r.value))).toBe(50000);
+  it('never suggests a goal the plan does not reward', () => {
+    const rungs = goalRungs(summary({ lastMonth: { month: '2026-06', revenue: 90000 } }));
+    // Below the band start every rupee pays the same base, so nothing under it
+    // is a goal.
+    expect(Math.min(...rungs.map((r) => r.value))).toBe(240000);
   });
 
   it('drops duplicates the flooring creates', () => {
-    const rungs = goalRungs(summary({ lastMonth: { month: '2026-06', driverPay: 1000 } }));
+    const rungs = goalRungs(summary({ lastMonth: { month: '2026-06', revenue: 1000 } }));
     expect(rungs).toHaveLength(1);
-    expect(rungs[0].value).toBe(50000);
+    expect(rungs[0].value).toBe(240000);
   });
 
   it('has nothing to suggest without a previous month', () => {
@@ -903,15 +1059,28 @@ describe('cashPocket', () => {
     expect(pocket.settlement).toBe(18000);
   });
 
-  it('nets what is left to settle against what has already been handed over', () => {
-    // 10,000 to settle across the month, 15,000 of it already handed over and
-    // confirmed: he is ahead, and "you hand over 10,000" would be stale.
-    const pocket = cashPocket(withCash({ settlement: 10000, confirmed: 15000 }), hero);
-    expect(pocket.settlement).toBe(10000);
-    expect(pocket.leftToSettle).toBe(-5000);
+  /**
+   * Measured against the month's CASH, not the settlement. He hands back every
+   * rupee he collects and is paid separately, so netting his pay off this figure
+   * understated the money he is carrying for somebody else.
+   */
+  it('nets what is left to hand over against what has already gone back', () => {
+    // 60,000 of cash across the month, 65,000 already handed over and confirmed:
+    // he is ahead, and "you hand over 60,000" would be stale.
+    const pocket = cashPocket(withCash({ projectedCash: 60000, confirmed: 65000 }), hero);
+    expect(pocket.projectedCash).toBe(60000);
+    expect(pocket.leftToHandOver).toBe(-5000);
 
-    const midway = cashPocket(withCash({ settlement: 39271, confirmed: 18000 }), hero);
-    expect(midway.leftToSettle).toBe(21271);
+    const midway = cashPocket(withCash({ projectedCash: 60000, confirmed: 18000 }), hero);
+    expect(midway.leftToHandOver).toBe(42000);
+  });
+
+  it('hands back the whole month of cash, whichever way the settlement goes', () => {
+    // A slow month on a good tier can leave the owner owing HIM — and he still
+    // hands over all the cash he collected. The two facts are separate.
+    const owedHim = cashPocket(withCash({ projectedCash: 30000, settlement: -18000 }), hero);
+    expect(owedHim.projectedCash).toBe(30000);
+    expect(owedHim.leftToHandOver).toBe(15000);
   });
 
   it('carries the ledger through for both roles', () => {
@@ -1140,7 +1309,7 @@ describe('a goal far out of reach', () => {
     // best day, so the hero shows the most he could credibly do and names the real
     // requirement beside it.
     const s = summary({
-      payTarget: 800000,
+      revenueTarget: 1_764_000,
       revenue: 72852.02,
       projectedDays: 4,
       bestDay: { date: '2026-07-25', revenue: 16983.53, trips: 13 },
@@ -1148,9 +1317,8 @@ describe('a goal far out of reach', () => {
     const hero = dailyTarget(s);
     expect(hero.kind).toBe('goal');
     // What the goal actually needs — not a figure invented to stand in for it.
-    // 800,000 take-home needs 1,764,000 of revenue; from 72,852 over four days
-    // that is 422,800 a day, and saying so is the only useful thing the screen
-    // can do with a goal of this size.
+    // From 72,852 over four days that is 422,800 a day, and saying so is the
+    // only useful thing the screen can do with a goal of this size.
     expect(hero.amount).toBe(paces(s).goalPace);
     expect(hero.amount).toBeGreaterThan(400000);
     // And the goal block says the same, in the same rows it always uses.
@@ -1158,10 +1326,37 @@ describe('a goal far out of reach', () => {
   });
 
   it('scales the goal to the month before deciding any of that', () => {
-    const s = summary({ payTarget: 800000, prorationFactor: JULY_FACTOR });
-    // 800,000 × 12/31, and the revenue that take-home needs on the prorated plan.
-    expect(payTargetForMonth(s)).toBe(309677);
+    const s = summary({ revenueTarget: 1_764_000, prorationFactor: JULY_FACTOR });
+    // 1,764,000 × 12/31, then rounded up to a figure worth printing.
+    expect(revenueTargetForMonth(s)).toBe(682839);
     expect(targetForMonth(s)).toBe(683000);
-    expect(payAt(683000, s)).toBeGreaterThanOrEqual(309677);
+    // And the take-home it earns, derived from the prorated plan rather than
+    // asked for — the direction this used to run in.
+    expect(payAtTargetForMonth(s)).toBe(Math.round(payAt(683000, s)));
+  });
+});
+
+describe('the document stamp', () => {
+  /**
+   * Colombo time, not the machine's. A statement produced at 00:30 local is
+   * 19:00 the previous day in UTC — stamped from the wrong clock it would carry
+   * yesterday's date on a document whose whole point is when it was made.
+   */
+  it('stamps in Colombo time, not UTC', () => {
+    // 2026-07-31T19:00Z is already 2026-08-01 in Colombo (+5:30).
+    expect(generatedAt(new Date('2026-07-31T19:00:00Z'))).toBe('01 Aug 2026, 00:30');
+    expect(generatedAt(new Date('2026-07-31T18:29:00Z'))).toBe('31 Jul 2026, 23:59');
+  });
+
+  it('uses a 24-hour clock, zero padded', () => {
+    expect(generatedAt(new Date('2026-07-31T02:05:00Z'))).toBe('31 Jul 2026, 07:35');
+  });
+
+  it('spells the month the way the rest of the app does', () => {
+    setLocale('si');
+    // The dictionary's transliteration, not CLDR's — the same rule `monthLabel`
+    // follows, and the reason this is not `toLocaleString`.
+    expect(generatedAt(new Date('2026-07-31T06:00:00Z'))).toContain('ජූලි');
+    resetLocale('en');
   });
 });

@@ -38,7 +38,7 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
     setLoading(true);
     api
       .summary(month)
-      .then((s) => !cancelled && (setSummary(s), setError(''), onDriverName?.(s.driverName)))
+      .then((s) => !cancelled && (setSummary(s), setError(''), onDriverName?.(s.driverName, s.driverNameSi)))
       .catch((e) => !cancelled && setError(e.message))
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -156,7 +156,8 @@ export default function Dashboard({ month, setMonth, isOwner, onDriverName }) {
             projected={summary.projectedRevenue}
             bandStart={summary.plan.bandStart}
             bandEnd={summary.plan.bandEnd}
-            operatingDays={summary.operatingDays}
+            bandRate={summary.push?.bandRate}
+            topRate={summary.push?.topRate}
           />
 
           {/* Ahead of the chart: the ask should be the first thing read, and it

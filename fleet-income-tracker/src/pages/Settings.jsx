@@ -4,6 +4,7 @@ import { calculatePay } from '../../shared/commission.mjs';
 import { money, amount } from '../format.js';
 import ChargerEditor from '../components/ChargerEditor.jsx';
 import CostEditor from '../components/CostEditor.jsx';
+import StartingCash from '../components/StartingCash.jsx';
 
 const CHECK_REVENUE = 406789.2;
 const CHECK_EXPECTED = 121394.6;
@@ -48,7 +49,8 @@ export default function Settings() {
         holdingYears: Number(form.holdingYears) || 5,
         resaleValue: form.resaleValue === '' ? null : Number(form.resaleValue),
         driverName: (form.driverName || '').trim() || 'Driver',
-        payTarget: form.payTarget === '' ? null : Number(form.payTarget),
+        driverNameSi: (form.driverNameSi || '').trim(),
+        revenueTarget: form.revenueTarget === '' ? null : Number(form.revenueTarget),
         revenueBasis: form.revenueBasis === 'gross' ? 'gross' : 'net',
         uberCommissionRate: Number(form.uberCommissionRate) || 0,
         base: Number(form.base),
@@ -121,23 +123,41 @@ export default function Settings() {
         </div>
 
         <div className="grid gap-1 max-w-xs">
-          <label className="label" htmlFor="payTarget">
-            Driver's monthly take-home goal (LKR)
+          <label className="label" htmlFor="driverNameSi">
+            Driver name in Sinhala
           </label>
           <input
-            id="payTarget"
+            id="driverNameSi"
+            value={form.driverNameSi || ''}
+            onChange={(e) => setForm({ ...form, driverNameSi: e.target.value })}
+            placeholder="චන්දිම"
+          />
+          <p className="text-xs text-slate-400">
+            Optional. Shown in place of the name above when the app is being read in Sinhala. Leave
+            it blank and the Latin spelling is used in both languages — nothing is transliterated
+            automatically, because a guessed spelling of somebody's name is worse than none. Sign-in
+            still uses the Latin name; a phone offers a Latin keyboard at the login screen.
+          </p>
+        </div>
+
+        <div className="grid gap-1 max-w-xs">
+          <label className="label" htmlFor="revenueTarget">
+            Driver's monthly revenue goal (LKR)
+          </label>
+          <input
+            id="revenueTarget"
             type="number"
             step="5000"
             min="0"
             className="num"
-            value={form.payTarget ?? ''}
-            onChange={(e) => setForm({ ...form, payTarget: e.target.value })}
+            value={form.revenueTarget ?? ''}
+            onChange={(e) => setForm({ ...form, revenueTarget: e.target.value })}
           />
           <p className="text-xs text-slate-400">
-            What he wants to earn in a month, in his pocket — not revenue. Nothing is calculated
-            from it: his screen works backwards through the plan to the revenue it needs, prorated
-            in the month he started. He sets this himself on his own screen; this box is here for
-            the first one, or when he asks.
+            What he wants to drive in a month — revenue, not take-home. Nothing in payroll is
+            calculated from it: his screen prorates it for the month he started and works out what
+            the plan pays on it. He sets this himself on his own screen; this box is here for the
+            first one, or when he asks.
           </p>
         </div>
 
@@ -330,6 +350,11 @@ export default function Settings() {
           ))}
         </dl>
       </div>
+
+      {/* Cash the owner hands over, and the costs the driver may pay out of it.
+          Kept next to each other because they are two halves of one question:
+          what cash is in his pocket that is not a fare. */}
+      <StartingCash />
 
       <CostEditor />
 

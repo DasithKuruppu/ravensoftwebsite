@@ -1,5 +1,6 @@
 import { amount, count } from '../format.js';
 import { displayThreshold, perDayThreshold } from '../display.js';
+import { useT } from '../i18n/index.jsx';
 
 /**
  * How much of every extra rupee the driver keeps, and where the lines are.
@@ -16,6 +17,7 @@ import { displayThreshold, perDayThreshold } from '../display.js';
  * only one allowed green.
  */
 export default function MarginalRates({ summary }) {
+  const { t, tx } = useT();
   const p = summary.push;
   if (!p) return null;
 
@@ -29,47 +31,49 @@ export default function MarginalRates({ summary }) {
   return (
     <div className="space-y-4">
       <div>
-        <div className="label mb-2">How much of every extra rupee you keep</div>
+        <div className="label mb-2">{t('marginal.heading')}</div>
         <div className="flex gap-1.5">
           <Zone
             active={p.marginalNow === 0}
             tone="slate"
             pct="0%"
-            per="nothing extra yet"
-            range={`below ${amount(start)}`}
-            perDay={perDayThreshold(start, days)}
+            per={t('marginal.nothingExtra')}
+            range={t('marginal.below', { amount: amount(start) })}
           />
           <Zone
             active={p.marginalNow === p.bandRate}
             tone="warn"
             pct={`${Math.round(p.bandRate * 100)}%`}
-            per={`${count(1000 * p.bandRate)} per ${count(1000)}`}
-            range={`${amount(start)}–${amount(end)}`}
-            perDay={perDayThreshold(end, days)}
+            per={t('marginal.per', { keep: count(1000 * p.bandRate), of: count(1000) })}
+            range={t('marginal.between', { start: amount(start), end: amount(end) })}
           />
           <Zone
             active={p.marginalNow === p.topRate}
             tone="accent"
             pct={`${Math.round(p.topRate * 100)}%`}
-            per={`${count(1000 * p.topRate)} per ${count(1000)}`}
-            range={`above ${amount(end)}`}
-            perDay={null}
+            per={t('marginal.per', { keep: count(1000 * p.topRate), of: count(1000) })}
+            range={t('marginal.above', { amount: amount(end) })}
           />
         </div>
       </div>
 
-      {/* A single fact, so it is allowed to be a sentence. */}
-      <p className="text-sm text-slate-300">
-        Past <span className="num">{amount(end)}</span> — that is{' '}
-        <span className="num">{amount(perDayThreshold(end, days))}</span> a day — every rupee you
-        earn is worth <span className="num text-accent">{multiple}× more</span> to you than it is
-        below the line.
+      {/* A single fact, so it is allowed to be a sentence — one dictionary entry
+          with its figures as slots, so Sinhala can reorder it freely. */}
+      <p className="text-sm text-slate-300 leading-relaxed">
+        {tx('marginal.sentence', {
+          end: <span className="num">{amount(end)}</span>,
+          perDay: <span className="num">{amount(perDayThreshold(end, days))}</span>,
+          multiple: (
+            <span className="num text-accent">{t('marginal.multiple', { n: multiple })}</span>
+          ),
+        })}
       </p>
     </div>
   );
 }
 
-function Zone({ active, tone, pct, per, range, perDay }) {
+function Zone({ active, tone, pct, per, range }) {
+  const { t } = useT();
   const tones = {
     slate: 'border-ink-600 text-slate-300',
     warn: 'border-warn/50 text-warn',
@@ -85,12 +89,7 @@ function Zone({ active, tone, pct, per, range, perDay }) {
       <div className="num text-base font-semibold">{pct}</div>
       <div className="text-[11px] text-slate-300 mt-0.5 num">{per}</div>
       <div className="text-[11px] text-slate-400 mt-0.5 num">{range}</div>
-      {perDay ? (
-        <div className="text-[11px] text-slate-400 num">
-          {amount(perDay)}/day
-        </div>
-      ) : null}
-      {active && <div className="text-[11px] mt-1 font-medium">you are here</div>}
+      {active && <div className="text-[11px] mt-1 font-medium">{t('marginal.youAreHere')}</div>}
     </div>
   );
 }
