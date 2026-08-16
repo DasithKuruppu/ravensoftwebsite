@@ -118,6 +118,17 @@ export default function ReturnOnCapital({ summary }) {
             tone="text-warn"
           />
         )}
+        {/* Not part of the levelled total above: Uber's charges come from the
+            daily entries, not the cost ledger, so they are levelled by nothing
+            and shown on their own line rather than buried in the profit. */}
+        {r.uberFeesMonthly !== 0 && (
+          <Row
+            label={r.uberFeesMonthly < 0 ? 'Uber charges' : 'Uber refunds'}
+            hint="at the current rate — held flat, they do not expire"
+            value={amount(r.uberFeesMonthly)}
+            tone={r.uberFeesMonthly < 0 ? 'text-warn' : 'text-slate-300'}
+          />
+        )}
         <Row
           label="Interest given up"
           hint="not cash — what your own money could have earned"

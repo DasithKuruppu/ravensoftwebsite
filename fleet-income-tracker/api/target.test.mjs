@@ -8,7 +8,24 @@
  *      cannot receive the lease, insurance, depreciation or the revenue licence
  *      whatever a future screen asks for.
  */
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+
+/**
+ * Pin the clock for a test that seeds "today" and "yesterday".
+ *
+ * Those two are in different MONTHS on the first of any month, so a suite that
+ * reads the wall clock passes for thirty days and fails on the thirty-first —
+ * which is exactly what happened. Mid-May, deliberately: every other fixture in
+ * this file is dated in July, so a pinned clock there would collide with days
+ * those tests have already written. Timers still advance so awaits resolve.
+ */
+function atMidMonth() {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-05-15T06:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+}
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -281,6 +298,8 @@ describe('PUT /entries/{date}/charging', () => {
     const refused = await call('PUT', `/entries/${DATE}`, { token: driverToken, body: { revenue: 1 } });
     expect(refused.status).toBe(403);
   });
+
+  atMidMonth();
 
   it('feeds the summary as a logged day, with the modelled days marked', async () => {
     // Inside the trailing window, because that is where the daily displays read
@@ -586,6 +605,8 @@ describe('a settings row that predates the Uber fields', () => {
 });
 
 describe('the projection and a shift still in progress', () => {
+  atMidMonth();
+
   beforeEach(async () => {
     const { store, DEFAULT_DRIVER } = await import('./store.mjs');
     const { todayInColombo } = await import('./handler.mjs');
@@ -607,7 +628,7 @@ describe('the projection and a shift still in progress', () => {
       .slice(0, 10);
   }
 
-  it('strikes the pace over complete days, not the hours so far today', async () => {
+    it('strikes the pace over complete days, not the hours so far today', async () => {
     const { importRows, todayInColombo } = await import('./handler.mjs');
     await importRows([
       { date: await daysAgo(2), revenue: '12000', trips: '10' },
@@ -640,23 +661,23 @@ describe('the projection and a shift still in progress', () => {
     expect(res.body.projectedRevenue).toBe(24000 + 12000 * left);
   });
 
-  it('counts today among the days left, and a booked day off out of them', async () => {
-    const { importRows, todayInColombo, daysInMonthOf } = await import('./handler.mjs');
-    const today = todayInColombo();
-    const month = today.slice(0, 7);
-    const days = daysInMonthOf(month);
-    await importRows([{ date: await daysAgo(1), revenue: '12000', trips: '10' }]);
+it('counts today among the days left, and a booked day off out of them', async () => {
+  const { importRows, todayInColombo, daysInMonthOf } = await import('./handler.mjs');
+  const today = todayInColombo();
+  const month = today.slice(0, 7);
+  const days = daysInMonthOf(month);
+  await importRows([{ date: await daysAgo(1), revenue: '12000', trips: '10' }]);
 
-    const before = await call('GET', '/summary', { token: driverToken });
-    expect(before.body.projectedDays).toBe(days - Number(today.slice(8, 10)) + 1);
+  const before = await call('GET', '/summary', { token: driverToken });
+  expect(before.body.projectedDays).toBe(days - Number(today.slice(8, 10)) + 1);
 
-    // Book the last day of the month off.
-    await call('PUT', `/entries/${month}-${String(days).padStart(2, '0')}/off`, {
-      token: driverToken,
-      body: { off: true },
-    });
-    const after = await call('GET', '/summary', { token: driverToken });
-    expect(after.body.projectedDays).toBe(before.body.projectedDays - 1);
+  // Book the last day of the month off.
+  await call('PUT', `/entries/${month}-${String(days).padStart(2, '0')}/off`, {
+    token: driverToken,
+    body: { off: true },
+  });
+  const after = await call('GET', '/summary', { token: driverToken });
+  expect(after.body.projectedDays).toBe(before.body.projectedDays - 1);
   });
 
   it('does not let an unimported past day buy an extra day to earn it back', async () => {

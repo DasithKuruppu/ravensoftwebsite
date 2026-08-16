@@ -991,15 +991,28 @@ async function buildSummary(month, auth) {
         }, horizonMonths)
       : null;
 
+    // Uber's own charges — the subscription and the per-trip fees — are a cost
+    // of running the car like any other, and every profit figure on the
+    // dashboard already carries them. They are NOT in `allCosts`, though: they
+    // arrive with the daily entries rather than the cost ledger, so
+    // `levelisedMonthly` cannot see them and the return had to be told about
+    // them here or it would quietly bill a car that never paid Uber anything.
+    // Held flat at next month's rate across the horizon — unlike the lease
+    // there is no term after which they stop.
+    const uberFeesMonthly = payload.nextMonth?.uberFees ?? 0;
+
     payload.roi = buildRoi({
       settings,
-      thisMonthProfit: round2(projShare - costs.total),
+      thisMonthProfit: payload.projectedOwnerProfit,
       nextMonthProfit: payload.nextMonth?.ownerProfit ?? null,
       nextMonthLabel: payload.nextMonth?.month ?? null,
       // The investment view: full-month revenue against levelised costs.
       levelisedProfit:
-        payload.nextMonth && levelised ? round2(payload.nextMonth.ownerShare - levelised.total) : null,
+        payload.nextMonth && levelised
+          ? round2(payload.nextMonth.ownerShare - levelised.total + uberFeesMonthly)
+          : null,
       levelised,
+      uberFeesMonthly,
       horizonMonths,
       holdingStart,
     });
@@ -1696,7 +1709,7 @@ function buildNextMonth({ month, settings, dailyRate, kmDriven, daysDriven, pace
  */
 function buildRoi({
   settings, thisMonthProfit, nextMonthProfit, nextMonthLabel,
-  levelisedProfit, levelised, horizonMonths, holdingStart,
+  levelisedProfit, levelised, uberFeesMonthly = 0, horizonMonths, holdingStart,
 }) {
   const capital = Number(settings.capitalInvested) || 0;
   const ratePct = Number(settings.alternativeRatePct) || 0;
@@ -1787,6 +1800,10 @@ function buildRoi({
     holdingEnd: addMonths(holdingStart, horizonMonths - 1),
     holdingYears: Math.round((horizonMonths / 12) * 10) / 10,
     levelised,
+    // Outside `levelised` because it never came from the cost ledger. Carried
+    // out so the card can show the deduction rather than fold it silently into
+    // the profit line.
+    uberFeesMonthly: round2(uberFeesMonthly),
     // Lead on the whole holding period — that is the investment question. The
     // single months are kept for contrast.
     headline: overHolding || nextMonth || thisMonth,

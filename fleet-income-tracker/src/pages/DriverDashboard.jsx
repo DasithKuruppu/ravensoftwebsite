@@ -11,6 +11,7 @@ import {
   dateLabel,
   todayLocal,
   rate as rateOf,
+  ago,
 } from '../format.js';
 import { useT } from '../i18n/index.jsx';
 import {
@@ -128,6 +129,12 @@ export default function DriverDashboard({ summary, month, setMonth, onRefresh })
                 })
           }
         />
+        {/* Today, beside the average it is being judged against. Incomplete by
+            definition — the car is still out — so it carries how fresh it is
+            rather than being read as a finished figure. It sits next to the
+            average deliberately: "18,360 a day" means something different when
+            today already shows 21,000 than when it shows nothing. */}
+        <Today summary={summary} />
         <Yesterday summary={summary} />
         <BestDay summary={summary} />
         {/* Called days, counted as shifts. A booked day off is not a day he can
@@ -337,6 +344,51 @@ function BestDay({ summary }) {
         .filter(Boolean)
         .join(' · ')}
       flag={fresh ? t('stat.newBest') : null}
+    />
+  );
+}
+
+/**
+ * What today has brought in so far, and how current that is.
+ *
+ * The freshness matters more here than anywhere else on the screen. Every other
+ * figure is about finished days; this one is a running total that only moves
+ * when an import lands, so a driver who has done six hours and sees nothing
+ * needs to know whether the answer is "you earned nothing" or "nothing has come
+ * through yet". Amber past a day, because by then it is the import that is
+ * broken rather than the driving.
+ */
+function Today({ summary }) {
+  const { t } = useT();
+  const today = summary.today;
+  const last = summary.lastUpdated;
+  const { text, minutes } = last ? ago(last.at) : { text: null, minutes: null };
+  const stale = minutes !== null && minutes >= 1440;
+
+  const earned = today && !today.offDay ? today.revenue || 0 : 0;
+  return (
+    <Stat
+      label={t('stat.today')}
+      value={today?.offDay ? t('stat.dayOff') : earned > 0 ? money(earned) : t('stat.nothingYet')}
+      sub={
+        today?.offDay
+          ? t('stat.rested')
+          : earned > 0
+            ? t('stat.trips', { count: count(today.trips || 0) })
+            : t('stat.todayNothingYet')
+      }
+      flag={
+        text ? (
+          <span
+            className={stale ? 'text-warn' : 'text-slate-400'}
+            title={last.date ? t('stat.updatedFor', { date: dayLabel(last.date) }) : undefined}
+          >
+            {t('stat.updated', { ago: text })}
+          </span>
+        ) : (
+          <span className="text-slate-400">{t('stat.neverUpdated')}</span>
+        )
+      }
     />
   );
 }
