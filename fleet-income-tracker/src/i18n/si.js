@@ -7,6 +7,12 @@
  */
 export default {
   /* ── shell ── */
+  'update.ready': 'නව අනුවාදයක් තිබේ.',
+  'update.action': 'යාවත්කාලීන කරන්න',
+  'install.ready': 'ඉක්මන් ප්‍රවේශය සඳහා Ravensoft Tracker ස්ථාපනය කරන්න.',
+  'install.action': 'ස්ථාපනය කරන්න',
+  'install.ios': 'ස්ථාපනය කිරීමට: Share තට්ටු කර, “Add to Home Screen” තෝරන්න.',
+  'install.dismiss': 'දැන් නොවේ',
   'nav.dashboard': 'ඩෑෂ්බෝඩ්',
   'nav.dashboard.short': 'ඩෑෂ්බෝඩ්',
   'nav.log': 'දෛනික සටහන',

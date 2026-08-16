@@ -1,8 +1,35 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+/**
+ * Stamp the build's id into the service worker.
+ *
+ * `public/` is copied verbatim, so without this every deploy ships a
+ * byte-identical worker — and a byte-identical worker is not an update as far
+ * as the browser is concerned. It would never activate, never clear the old
+ * caches, and an installed tracker would sit on whatever it first downloaded.
+ */
+function stampServiceWorker() {
+  return {
+    name: 'stamp-service-worker',
+    apply: 'build',
+    closeBundle() {
+      const file = path.resolve('dist/sw.js');
+      try {
+        const id = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+        writeFileSync(file, readFileSync(file, 'utf8').replace('__BUILD_ID__', id));
+        console.log(`  service worker stamped ${id}`);
+      } catch (err) {
+        console.warn('  could not stamp service worker:', err.message);
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), stampServiceWorker()],
   server: {
     port: 5173,
     // Dev-only: the SPA calls /api/* and Vite forwards to the local Lambda wrapper.

@@ -17,6 +17,7 @@ import Login from './pages/Login.jsx';
 import Payslip from './pages/Payslip.jsx';
 import { currentMonth } from './format.js';
 import { useT, useLocale, LanguageToggle } from './i18n/index.jsx';
+import { UpdatePrompt, InstallPrompt } from './components/PwaPrompts.jsx';
 
 export default function App() {
   const [role, setRole] = useState(() => (getToken() ? getRole() : null));
@@ -54,7 +55,14 @@ export default function App() {
     rememberDriverName(name, nameSi);
   }, []);
 
-  if (!role) return <Login onLogin={handleLogin} />;
+  if (!role)
+    return (
+      <>
+        <Login onLogin={handleLogin} />
+        <InstallPrompt />
+        <UpdatePrompt />
+      </>
+    );
 
   const isOwner = role === 'owner';
 
@@ -95,6 +103,8 @@ export default function App() {
         </Routes>
       </main>
       <MobileNav isOwner={isOwner} />
+      <InstallPrompt />
+      <UpdatePrompt />
     </div>
   );
 }

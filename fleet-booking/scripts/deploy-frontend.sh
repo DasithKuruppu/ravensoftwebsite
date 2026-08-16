@@ -66,6 +66,11 @@ aws s3 sync "$ROOT/dist/" "s3://$BUCKET/" \
   --exclude index.html \
   --exclude sw.js \
   --exclude manifest.webmanifest \
+  --exclude icon-192.png \
+  --exclude icon-512.png \
+  --exclude icon-maskable-512.png \
+  --exclude apple-touch-icon.png \
+  --exclude RavensoftLogo.png \
   --cache-control "public,max-age=31536000,immutable"
 
 aws s3 cp "$ROOT/dist/index.html" "s3://$BUCKET/index.html" \
@@ -87,6 +92,17 @@ aws s3 cp "$ROOT/dist/sw.js" "s3://$BUCKET/sw.js" \
 aws s3 cp "$ROOT/dist/manifest.webmanifest" "s3://$BUCKET/manifest.webmanifest" \
   --cache-control "no-cache,must-revalidate" \
   --content-type "application/manifest+json; charset=utf-8"
+
+# Icons keep stable filenames — only /assets/ is fingerprinted — so caching them
+# hard means a changed icon can never reach a browser that already has one. They
+# are a few KB and 304 when unchanged, so revalidating costs almost nothing and
+# removes a whole class of "the icon will not update" bug.
+for f in icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png RavensoftLogo.png; do
+  [ -f "$ROOT/dist/$f" ] && aws s3 cp "$ROOT/dist/$f" "s3://$BUCKET/$f" \
+    --cache-control "no-cache,must-revalidate" \
+    --content-type "image/png" >/dev/null
+done
+printf '  icons uploaded with revalidation\n'
 
 printf '\033[1m▸ Invalidating CloudFront %s\033[0m\n' "$DIST_ID"
 aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths '/*' \

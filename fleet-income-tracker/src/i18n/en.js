@@ -16,6 +16,12 @@
  */
 export default {
   /* ── shell ── */
+  'update.ready': 'A new version is available.',
+  'update.action': 'Update',
+  'install.ready': 'Install Ravensoft Tracker for quicker access.',
+  'install.action': 'Install',
+  'install.ios': 'To install: tap Share, then “Add to Home Screen”.',
+  'install.dismiss': 'Not now',
   'nav.dashboard': 'Dashboard',
   'nav.dashboard.short': 'Dashboard',
   'nav.log': 'Daily log',

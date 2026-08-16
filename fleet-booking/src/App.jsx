@@ -89,7 +89,7 @@ function InstallPrompt() {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <div className="pointer-events-auto flex max-w-md items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-sm shadow-lg">
-        <img src="/icon-192.png" alt="" width="32" height="32" className="h-8 w-8 shrink-0 rounded-lg" />
+        <img src="/icon-192.png?v=2" alt="" width="32" height="32" className="h-8 w-8 shrink-0 rounded-lg" />
         <span className="min-w-0 break-words">
           {kind === 'ios' ? t('install.ios') : t('install.ready')}
         </span>
