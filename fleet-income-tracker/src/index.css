@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-ink-950 text-slate-200;
+  }
+  /* Figures line up in columns — every number in the UI is tabular. */
+  .num {
+    @apply font-mono tabular-nums;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Focus is a neutral highlight, not green: green means the driver's money and
+     nothing else, and a text box is not money. */
+  input,
+  select {
+    @apply bg-ink-900 border border-ink-700 rounded-md px-3 py-2 text-slate-100
+           outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400/40;
+  }
+  input[type='file'] {
+    @apply py-1.5 text-sm file:mr-3 file:rounded file:border-0 file:bg-ink-700
+           file:px-3 file:py-1.5 file:text-slate-200;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-ink-900 border border-ink-800 rounded-xl p-5;
+  }
+  /* Microlabels used to be 12px letterspaced all-caps in slate-500, which is
+     3.9:1 on this background — under AA at any size. Sentence case in slate-400
+     is 7:1, and dropping the tracking makes the same width hold more label. */
+  .label {
+    @apply text-xs font-medium text-slate-400;
+  }
+  .btn {
+    @apply px-3 py-2 rounded-md text-sm font-medium transition-colors
+           bg-ink-800 hover:bg-ink-700 border border-ink-700 disabled:opacity-40
+           disabled:cursor-not-allowed;
+  }
+  /* Neutral, not green. Buttons are chrome; the colour contract keeps green for
+     money the driver keeps. */
+  .btn-primary {
+    @apply bg-slate-200 hover:bg-white text-ink-950 border-transparent font-semibold;
+  }
+  .btn-danger {
+    @apply text-danger hover:bg-danger/10 border-danger/30;
+  }
+  .th {
+    @apply text-left text-xs text-slate-400 font-medium px-3 py-2;
+  }
+  .td {
+    @apply px-3 py-2 border-t border-ink-800;
+  }
+}
+
+/* Leaflet: OpenStreetMap only ships light tiles, so darken the tile pane to sit
+   with the dashboard. Deliberately scoped to the tiles — filtering the whole
+   map would invert the markers too, and their colour carries the price band. */
+.fleet-map .leaflet-tile-pane {
+  filter: invert(0.92) hue-rotate(180deg) saturate(0.75) brightness(0.95);
+}
+.fleet-map .leaflet-container {
+  background: #0a0c10;
+}
+.fleet-map .leaflet-control-attribution {
+  background: rgba(15, 18, 24, 0.8);
+  color: #64748b;
+}
+.fleet-map .leaflet-control-attribution a {
+  color: #94a3b8;
+}
+.fleet-map .leaflet-popup-content-wrapper,
+.fleet-map .leaflet-popup-tip {
+  background: #141821;
+  color: #e2e8f0;
+  border: 1px solid #262c38;
+}
+.fleet-map .leaflet-bar a {
+  background: #141821;
+  color: #e2e8f0;
+  border-color: #262c38;
+}
+.fleet-map .leaflet-bar a:hover {
+  background: #1b2029;
+}
+
+/*
+ * Printing a payslip.
+ *
+ * The app is dark by design; paper is not. Printed as-is it would burn a
+ * cartridge on a black background and render the figures in near-white on it, so
+ * the payslip switches to ink-on-paper for print only — and drops the chrome,
+ * since a nav bar has no meaning in a document somebody files.
+ */
+@media print {
+  /* Chrome, in every form it takes: the top bar with sign-out and the language
+     switch, the bottom tab bar, and the print button itself. A control has no
+     meaning on paper, and sign-out on a document somebody files is noise at
+     best. Belt and braces — the class is on each of them, and the element
+     selectors catch anything added later without one. */
+  /* Chrome, in every form it takes: the top bar with sign-out and the language
+     switch, the bottom tab bar, and the print button itself.
+
+     Scoped by class, NOT by element. The statement's own title block is a
+     `<header>` too, so a blanket `header` rule would take the document's heading
+     with the app's. `nav` is safe — the statement has none — and catches any tab
+     bar added later without the class. */
+  .no-print,
+  nav {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .payslip .print-plain {
+    background: #fff !important;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+  .payslip * {
+    color: #111 !important;
+    border-color: #bbb !important;
+  }
+  /* The two figures that matter keep their emphasis through weight, since
+     colour is gone. */
+  .payslip .text-accent,
+  .payslip .text-warn {
+    font-weight: 700 !important;
+  }
+}

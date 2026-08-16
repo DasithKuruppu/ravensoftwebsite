@@ -1,0 +1,20 @@
+# DynamoDB Local for development.
+#
+#   npm run ddb:up && npm run ddb:create-table && npm run seed
+#
+# Then set DDB_ENDPOINT=http://localhost:8000 in .env so the API talks to it.
+# Without Docker, leave DDB_ENDPOINT unset and the API uses the JSON file store
+# at .local/store.json instead — same interface, no container required.
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: fleet-dynamodb-local
+    ports:
+      - '8000:8000'
+    command: ['-jar', 'DynamoDBLocal.jar', '-sharedDb', '-dbPath', '/data']
+    working_dir: /home/dynamodblocal
+    volumes:
+      - dynamodb-data:/data
+
+volumes:
+  dynamodb-data:
