@@ -1,0 +1,48 @@
+{
+  "name": "Ravensoft Fleet",
+  "short_name": "Fleet",
+  "description": "Book a car and driver in advance for full-day and multi-day trips in Sri Lanka.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f7f5",
+  "theme_color": "#0f6f4f",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": [
+    "travel",
+    "business"
+  ],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "My trips",
+      "url": "/bookings",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

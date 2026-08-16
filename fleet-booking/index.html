@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f6f4f" />
+    <title>Ravensoft Fleet — book a long hire</title>
+    <meta
+      name="description"
+      content="Book a car and driver in advance for a full-day or multi-day trip in Sri Lanka. Enter your route and see the price straight away."
+    />
+    <link rel="icon" type="image/png" href="/RavensoftLogo.png" />
+    <!-- iOS composites a transparent icon onto black, so it gets its own
+         white-backed file rather than the bare logo. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Versioned URL. The manifest has carried two different app names, and a
+         cached copy anywhere in the chain — browser, CDN, or a service worker
+         that once cached it — serves an old name that then gets baked into the
+         install. A distinct URL cannot be served from any of those. -->
+    <link rel="manifest" href="/manifest.webmanifest?v=3" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Fleet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
